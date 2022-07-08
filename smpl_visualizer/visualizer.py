@@ -6,6 +6,7 @@ from vtk import vtkTransform
 from .torch_transform import quat_apply, quat_between_two_vec, quaternion_to_angle_axis, angle_axis_to_quaternion
 from .vis3d import Visualizer3D
 from .smpl import SMPL, SMPL_MODEL_DIR
+from .vis import make_checker_board_texture
 
 
 class SMPLActor():
@@ -124,38 +125,37 @@ class SMPLVisualizer(Visualizer3D):
         self.smpl_verts = None
 
         if self.show_smpl:
-            assert smpl_seq['shape'].shape[0] == 1
-
-            pose = smpl_seq['pose']
-
-            trans = smpl_seq['trans']
-            # trans = smpl_seq['trans'].repeat((pose.shape[0], 1, 1))
-
-            shape = smpl_seq['shape'].repeat((pose.shape[0], 1, 1))
+            pose = smpl_seq['pose'] # num_actor x num_frames x (num_joints x 3)
+            trans = smpl_seq['trans'] # num_actor x num_frames x 3
             
-            # print(pose[..., :3].view(-1, 3))
             orig_pose_shape = pose.shape
             self.smpl_motion = self.smpl(
                 global_orient=pose[..., :3].view(-1, 3),
                 body_pose=pose[..., 3:].view(-1, 69),
-                betas=torch.zeros_like(shape.view(-1, 10)),     # TODO
+                betas=torch.zeros(pose.shape[0]*pose.shape[1], 10).float(),
                 root_trans = trans.view(-1, 3),
                 return_full_pose=True,
                 orig_joints=True
             )
 
             self.smpl_verts = self.smpl_motion.vertices.reshape(*orig_pose_shape[:-1], -1, 3)
-            self.smpl_joints = self.smpl_motion.joints.reshape(*orig_pose_shape[:-1], -1, 3)
-        
+            # self.smpl_joints = self.smpl_motion.joints.reshape(*orig_pose_shape[:-1], -1, 3)
+
+            # Change coordinate to align with court space
+            self.smpl_verts -= trans.unsqueeze(-2)
+            self.smpl_verts = self.smpl_verts[..., [0, 2, 1]]
+            self.smpl_verts[..., 2] *= -1
+            self.smpl_verts += trans.unsqueeze(-2)
+
         if self.show_skeleton:
             joints = smpl_seq['joint_pos'] # num_actor x num_frames x num_joints x 3
 
             trans = smpl_seq['trans'] # num_actor x num_frames x 3
             # trans = smpl_seq['trans'].repeat((joints.shape[0], 1, 1))
-            
-            # FIXME: what is the dimension of orient
-            orient = smpl_seq['orient']
+
+            # Orient is None for hybrIK since joints already has global orentation             
             # orient = smpl_seq['pose'][..., :3].repeat((joints.shape[0], 1, 1))
+            orient = smpl_seq['orient']
 
             joints_world = joints
             if orient is not None:
@@ -168,27 +168,44 @@ class SMPLVisualizer(Visualizer3D):
 
         self.fr = 0
         self.num_fr = self.smpl_joints.shape[1]
-        # self.vis_mask = self.smpl_seq['frame_mask'][0].cpu().numpy()
 
     def init_camera(self, init_args):
         super().init_camera()
 
-        if init_args.get('camera') == 'front':
-            self.pl.camera.up = (0, 0, 1)
-            self.pl.camera.focal_point = [0, 0, 0]
-            self.pl.camera.position = [0, -25, 3]
-        elif init_args.get('camera') == 'side_both':
-            self.pl.camera.up = (0, 0, 1)
-            self.pl.camera.focal_point = [0, 0, 0]
-            self.pl.camera.position = [15, 0, 3]
-        elif init_args.get('camera') == 'side_near':
-            self.pl.camera.up = (0, 0, 1)
-            self.pl.camera.focal_point = [0, -12, 0]
-            self.pl.camera.position = [15, -12, 3]
-        elif init_args.get('camera') == 'side_far':
-            self.pl.camera.up = (0, 0, 1)
-            self.pl.camera.focal_point = [0, 12, 0]
-            self.pl.camera.position = [15, 12, 3]
+        if init_args.get('court') == 'tennis':
+            if init_args.get('camera') == 'front':
+                self.pl.camera.up = (0, 0, 1)
+                self.pl.camera.focal_point = [0, 0, 0]
+                self.pl.camera.position = [0, -25, 3]
+            elif init_args.get('camera') == 'side_both':
+                self.pl.camera.up = (0, 0, 1)
+                self.pl.camera.focal_point = [0, 0, 0]
+                self.pl.camera.position = [15, 0, 3]
+            elif init_args.get('camera') == 'side_near':
+                self.pl.camera.up = (0, 0, 1)
+                self.pl.camera.focal_point = [0, -12, 0]
+                self.pl.camera.position = [15, -12, 3]
+            elif init_args.get('camera') == 'side_far':
+                self.pl.camera.up = (0, 0, 1)
+                self.pl.camera.focal_point = [0, 12, 0]
+                self.pl.camera.position = [15, 12, 3]
+        elif init_args.get('court') == 'badminton':
+            if init_args.get('camera') == 'front':
+                self.pl.camera.up = (0, 0, 1)
+                self.pl.camera.focal_point = [0, 0, 0]
+                self.pl.camera.position = [0, -13, 3]
+            elif init_args.get('camera') == 'side_both':
+                self.pl.camera.up = (0, 0, 1)
+                self.pl.camera.focal_point = [0, 0, 0]
+                self.pl.camera.position = [15, 0, 3]
+            elif init_args.get('camera') == 'side_near':
+                self.pl.camera.up = (0, 0, 1)
+                self.pl.camera.focal_point = [0, -3.5, 0]
+                self.pl.camera.position = [15, -3.5, 3]
+            elif init_args.get('camera') == 'side_far':
+                self.pl.camera.up = (0, 0, 1)
+                self.pl.camera.focal_point = [0, 3.5, 0]
+                self.pl.camera.position = [15, 3.5, 3]
 
     def init_scene(self, init_args):
         if init_args is None:
@@ -199,14 +216,14 @@ class SMPLVisualizer(Visualizer3D):
             # Court
             wlh = (10.97, 11.89*2, 0.05)
             center = np.array([0, 0, -wlh[2] * 0.5])
-            court_mesh = pyvista.  Cube(center, *wlh)
+            court_mesh = pyvista.Cube(center, *wlh)
             self.pl.add_mesh(court_mesh, color='#4A609D', ambient=0.2, diffuse=0.8, specular=0, smooth_shading=True)
 
             # Court lines (vertical)
             for x, l in zip([-10.97/2, -8.23/2, 0, 8.23/2, 10.97/2], [23.77, 23.77, 12.8, 23.77, 23.77]):
                 wlh = (0.05, l, 0.05)
                 center = np.array([x, 0, -wlh[2] * 0.5])
-                court_line_mesh = pyvista.  Cube(center, *wlh)
+                court_line_mesh = pyvista.Cube(center, *wlh)
                 court_line_mesh.points[:, 2] += 0.01
                 self.pl.add_mesh(court_line_mesh, color='#FFFFFF', ambient=0.2, diffuse=0.8, specular=0.8, specular_power=5, smooth_shading=True)
             
@@ -214,16 +231,76 @@ class SMPLVisualizer(Visualizer3D):
             for y, w in zip([-11.89, -6.4, 0, 6.4, 11.89], [10.97, 8.23, 10.97, 8.23, 10.97]):
                 wlh = (w, 0.05, 0.05)
                 center = np.array([0, y, -wlh[2] * 0.5])
-                court_line_mesh = pyvista.  Cube(center, *wlh)
+                court_line_mesh = pyvista.Cube(center, *wlh)
+                court_line_mesh.points[:, 2] += 0.01
+                self.pl.add_mesh(court_line_mesh, color='#FFFFFF', ambient=0.2, diffuse=0.8, specular=0.8, specular_power=5, smooth_shading=True)
+            
+            # Post
+            for x in [-0.91-10.97/2, 0.91+10.97/2]:
+                wlh = (0.05, 0.05, 1.2)
+                center = np.array([x, 0, wlh[2] * 0.5])
+                post_mesh = pyvista.Cube(center, *wlh)
+                self.pl.add_mesh(post_mesh, color='#BD7427', ambient=0.2, diffuse=0.8, specular=0.8, specular_power=5, smooth_shading=True)
+            
+            # Net
+            wlh = (10.97+0.91*2, 0.01, 1.07)
+            center = np.array([0, 0, 1.07/2])
+            net_mesh = pyvista.Cube(center, *wlh)
+            net_mesh.active_t_coords *= 1000
+            tex = pyvista.numpy_to_texture(make_checker_board_texture('#FFFFFF', '#AAAAAA', width=10, height=10))
+            self.pl.add_mesh(net_mesh, texture=tex, ambient=0.2, diffuse=0.8, opacity=0.1, smooth_shading=True)
+
+        elif init_args.get('court') == 'badminton':
+            # Court
+            wlh = (6.1, 13.41, 0.05)
+            center = np.array([0, 0, -wlh[2] * 0.5])
+            court_mesh = pyvista.Cube(center, *wlh)
+            self.pl.add_mesh(court_mesh, color='#4A609D', ambient=0.2, diffuse=0.8, specular=0, smooth_shading=True)
+
+            # Court lines (vertical)
+            for x in [-3.05, -2.6, 2.6, 3.05]:
+                wlh = (0.05, 13.41, 0.05)
+                center = np.array([x, 0, -wlh[2] * 0.5])
+                court_line_mesh = pyvista.Cube(center, *wlh)
+                court_line_mesh.points[:, 2] += 0.01
+                self.pl.add_mesh(court_line_mesh, color='#FFFFFF', ambient=0.2, diffuse=0.8, specular=0.8, specular_power=5, smooth_shading=True)
+            for x, y, l in zip([0, 0], [-(1.98+6.71)/2, (1.98+6.71)/2], [3.96+0.76, 3.96+0.76]):
+                wlh = (0.05, l, 0.05)
+                center = np.array([x, y, -wlh[2] * 0.5])
+                court_line_mesh = pyvista.Cube(center, *wlh)
+                court_line_mesh.points[:, 2] += 0.01
+                self.pl.add_mesh(court_line_mesh, color='#FFFFFF', ambient=0.2, diffuse=0.8, specular=0.8, specular_power=5, smooth_shading=True)
+            
+            # Court lines (horizontal)
+            for y in [-6.71, -3.96-1.98, -1.98, 1.98, 1.98+3.96, 6.71]:
+                wlh = (6.1, 0.05, 0.05)
+                center = np.array([0, y, -wlh[2] * 0.5])
+                court_line_mesh = pyvista.Cube(center, *wlh)
                 court_line_mesh.points[:, 2] += 0.01
                 self.pl.add_mesh(court_line_mesh, color='#FFFFFF', ambient=0.2, diffuse=0.8, specular=0.8, specular_power=5, smooth_shading=True)
 
-            # floor
-            wlh = (20, 40, 0.05)
-            center = np.array([0, 0, -wlh[2] * 0.5])
-            floor_mesh = pyvista.Cube(center, *wlh)
-            floor_mesh.points[:, 2] -= 0.01
-            self.pl.add_mesh(floor_mesh, color='#769771', ambient=0.2, diffuse=0.8, specular=0.8, specular_power=5, smooth_shading=True)
+            # Post
+            for x in [-3.05, 3.05]:
+                wlh = (0.05, 0.05, 1.55)
+                center = np.array([x, 0, wlh[2] * 0.5])
+                post_mesh = pyvista.Cube(center, *wlh)
+                self.pl.add_mesh(post_mesh, color='#BD7427', ambient=0.2, diffuse=0.8, specular=0.8, specular_power=5, smooth_shading=True)
+            
+            # Net
+            wlh = (6.1, 0.01, 0.79)
+            center = np.array([0, 0, (0.76+1.55)/2])
+            net_mesh = pyvista.Cube(center, *wlh)
+            net_mesh.active_t_coords *= 1000
+            tex = pyvista.numpy_to_texture(make_checker_board_texture('#FFFFFF', '#AAAAAA', width=10, height=10))
+            self.pl.add_mesh(net_mesh, texture=tex, ambient=0.2, diffuse=0.8, opacity=0.1, smooth_shading=True)
+            
+
+        # floor
+        wlh = (20, 40, 0.05)
+        center = np.array([0, 0, -wlh[2] * 0.5])
+        floor_mesh = pyvista.Cube(center, *wlh)
+        floor_mesh.points[:, 2] -= 0.01
+        self.pl.add_mesh(floor_mesh, color='#769771', ambient=0.2, diffuse=0.8, specular=0.8, specular_power=5, smooth_shading=True)
 
         self.update_smpl_seq(init_args.get('smpl_seq', None))
         self.num_actors = init_args.get('num_actors', self.smpl_joints.shape[0])
@@ -250,15 +327,21 @@ class SMPLVisualizer(Visualizer3D):
 
         if self.show_smpl and self.smpl_verts is not None:
             for i, actor in enumerate(self.smpl_actors):
-                actor.update_verts(self.smpl_verts[i, self.fr].cpu().numpy())
-                actor.set_visibility(True)
-                actor.set_opacity(1.0)
+                if self.smpl_joints[i, self.fr].sum() == 0:
+                    actor.set_visibility(False)
+                else:
+                    actor.update_verts(self.smpl_verts[i, self.fr].cpu().numpy())
+                    actor.set_visibility(True)
+                    actor.set_opacity(0.5)
 
         if self.show_skeleton:
             for i, actor in enumerate(self.skeleton_actors):
-                actor.update_joints(self.smpl_joints[i, self.fr].cpu().numpy())
-                actor.set_visibility(True)
-                actor.set_opacity(1.0)
+                if self.smpl_joints[i, self.fr].sum() == 0:
+                    actor.set_visibility(False)
+                else:
+                    actor.update_joints(self.smpl_joints[i, self.fr].cpu().numpy())
+                    actor.set_visibility(True)
+                    actor.set_opacity(1.0)
 
     def setup_key_callback(self):
         super().setup_key_callback()

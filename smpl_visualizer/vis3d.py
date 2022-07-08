@@ -8,6 +8,7 @@ import shutil
 import platform
 import tempfile
 import pyrender
+from tqdm import tqdm
 from .vis import images_to_video, make_checker_board_texture, nparray_to_vtk_matrix
 
 
@@ -226,7 +227,7 @@ class Visualizer3D:
                 shutil.rmtree(frame_dir)
             os.makedirs(frame_dir)
         os.makedirs(osp.dirname(video_path), exist_ok=True)
-        for fr in range(self.num_fr):
+        for fr in tqdm(range(self.num_fr)):
             self.save_frame(fr, f'{frame_dir}/{fr:06d}.png')
         images_to_video(frame_dir, video_path, fps=fps, crf=crf, verbose=self.verbose)
         if cleanup:
