@@ -124,7 +124,7 @@ class SMPLVisualizer(Visualizer3D):
         self.smpl_seq = smpl_seq
         self.smpl_verts = None
 
-        if self.show_smpl:
+        if 'pose' in smpl_seq:
             pose = smpl_seq['pose'] # num_actor x num_frames x (num_joints x 3)
             trans = smpl_seq['trans'] # num_actor x num_frames x 3
             
@@ -147,7 +147,7 @@ class SMPLVisualizer(Visualizer3D):
             self.smpl_verts[..., 2] *= -1
             self.smpl_verts += trans.unsqueeze(-2)
 
-        if self.show_skeleton:
+        if 'joint_pos' in smpl_seq:
             joints = smpl_seq['joint_pos'] # num_actor x num_frames x num_joints x 3
 
             trans = smpl_seq['trans'] # num_actor x num_frames x 3
@@ -306,7 +306,11 @@ class SMPLVisualizer(Visualizer3D):
         self.num_actors = init_args.get('num_actors', self.smpl_joints.shape[0])
         if self.show_smpl and self.smpl_verts is not None:
             vertices = self.smpl_verts[0, 0].cpu().numpy()
-            self.smpl_actors = [SMPLActor(self.pl, vertices, self.smpl_faces) for _ in range(self.num_actors)]
+            if init_args.get('debug_root'):
+                # Odd actors are final result, even actors are old result
+                self.smpl_actors = [SMPLActor(self.pl, vertices, self.smpl_faces, color='#d00000' if i%2==0 else '#ffca3a') for i in range(self.num_actors)]
+            else:
+                self.smpl_actors = [SMPLActor(self.pl, vertices, self.smpl_faces) for _ in range(self.num_actors)]
         if self.show_skeleton:
             self.skeleton_actors = [SkeletonActor(self.pl, self.smpl_joint_parents) for _ in range(self.num_actors)]
         
