@@ -6,7 +6,7 @@ from vtk import vtkTransform
 from .torch_transform import quat_apply, quat_between_two_vec, quaternion_to_angle_axis, angle_axis_to_quaternion
 from .vis3d import Visualizer3D
 from .smpl import SMPL, SMPL_MODEL_DIR
-from .vis import make_checker_board_texture
+from .vis import make_checker_board_texture, get_color_palette
 
 
 class SMPLActor():
@@ -139,19 +139,11 @@ class SMPLVisualizer(Visualizer3D):
             )
 
             self.smpl_verts = self.smpl_motion.vertices.reshape(*orig_pose_shape[:-1], -1, 3)
-            # self.smpl_joints = self.smpl_motion.joints.reshape(*orig_pose_shape[:-1], -1, 3)
-
-            # Change coordinate to align with court space
-            self.smpl_verts -= trans.unsqueeze(-2)
-            self.smpl_verts = self.smpl_verts[..., [0, 2, 1]]
-            self.smpl_verts[..., 2] *= -1
-            self.smpl_verts += trans.unsqueeze(-2)
 
         if 'joint_pos' in smpl_seq:
             joints = smpl_seq['joint_pos'] # num_actor x num_frames x num_joints x 3
 
             trans = smpl_seq['trans'] # num_actor x num_frames x 3
-            # trans = smpl_seq['trans'].repeat((joints.shape[0], 1, 1))
 
             # Orient is None for hybrIK since joints already has global orentation             
             # orient = smpl_seq['pose'][..., :3].repeat((joints.shape[0], 1, 1))
@@ -304,15 +296,18 @@ class SMPLVisualizer(Visualizer3D):
 
         self.update_smpl_seq(init_args.get('smpl_seq', None))
         self.num_actors = init_args.get('num_actors', self.smpl_joints.shape[0])
+        colors = get_color_palette(self.num_actors, colormap='autumn')
         if self.show_smpl and self.smpl_verts is not None:
             vertices = self.smpl_verts[0, 0].cpu().numpy()
             if init_args.get('debug_root'):
                 # Odd actors are final result, even actors are old result
-                self.smpl_actors = [SMPLActor(self.pl, vertices, self.smpl_faces, color='#d00000' if i%2==0 else '#ffca3a') for i in range(self.num_actors)]
+                self.smpl_actors = [SMPLActor(self.pl, vertices, self.smpl_faces, color='#d00000' if i%2==0 else '#ffca3a') 
+                    for i in range(self.num_actors)]
             else:
                 self.smpl_actors = [SMPLActor(self.pl, vertices, self.smpl_faces) for _ in range(self.num_actors)]
         if self.show_skeleton:
-            self.skeleton_actors = [SkeletonActor(self.pl, self.smpl_joint_parents) for _ in range(self.num_actors)]
+            self.skeleton_actors = [SkeletonActor(self.pl, self.smpl_joint_parents, bone_color=colors[a]) 
+                for a in range(self.num_actors)]
         
     def update_camera(self, interactive):
         pass

@@ -8,6 +8,7 @@ import random
 import cv2 as cv
 import seaborn as sns
 from PIL import ImageColor
+import matplotlib.pyplot as plt
 
 
 FFMPEG_PATH = '/usr/bin/ffmpeg' if osp.exists('/usr/bin/ffmpeg') else 'ffmpeg'
@@ -175,3 +176,10 @@ def draw_keypoints(img, keypoints, confidence, size=4, color=(255, 0, 255)):
         if conf > 0.2:
             cv.circle(img, np.round(kp).astype(int).tolist(), size, color=color, thickness=-1)
     return img
+
+
+def get_color_palette(n, colormap='rainbow'):
+    cmap = plt.get_cmap(colormap)
+    colors = [cmap(i) for i in np.linspace(0, 1, n)]
+    colors = [[int(c[0] * 255), int(c[1] * 255), int(c[2] * 255)] for c in colors]
+    return colors

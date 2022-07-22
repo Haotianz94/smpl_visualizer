@@ -230,6 +230,7 @@ class Visualizer3D:
         for fr in tqdm(range(self.num_fr)):
             self.save_frame(fr, f'{frame_dir}/{fr:06d}.png')
         images_to_video(frame_dir, video_path, fps=fps, crf=crf, verbose=self.verbose)
+        print(f'Animation saved to {video_path}')
         if cleanup:
             shutil.rmtree(frame_dir)
 
