@@ -109,10 +109,11 @@ class SkeletonActor():
 
 class SMPLVisualizer(Visualizer3D):
 
-    def __init__(self, show_smpl=False, show_skeleton=True, device=torch.device('cpu'), **kwargs):
+    def __init__(self, show_smpl=False, show_skeleton=True, correct_root_height=False, device=torch.device('cpu'), **kwargs):
         super().__init__(**kwargs)
         self.show_smpl = show_smpl
         self.show_skeleton = show_skeleton
+        self.correct_root_height = correct_root_height
         # FIXME: what pose type to use
         self.smpl = SMPL(SMPL_MODEL_DIR, pose_type='body26fk', create_transl=False).to(device)
         faces = self.smpl.faces.copy()       
@@ -139,6 +140,8 @@ class SMPLVisualizer(Visualizer3D):
             )
 
             self.smpl_verts = self.smpl_motion.vertices.reshape(*orig_pose_shape[:-1], -1, 3)
+            if 'joint_pos' not in smpl_seq:
+                self.smpl_joints = self.smpl_motion.joints.reshape(*orig_pose_shape[:-1], -1, 3)
 
         if 'joint_pos' in smpl_seq:
             joints = smpl_seq['joint_pos'] # num_actor x num_frames x num_joints x 3
@@ -158,6 +161,12 @@ class SMPLVisualizer(Visualizer3D):
                 joints_world = joints_world + trans.unsqueeze(-2)
             self.smpl_joints = joints_world
 
+        if self.correct_root_height:
+            diff_root_height = torch.min(self.smpl_joints[:, :, 10:12, 2], dim=2)[0].view(*trans.shape[:2], 1)
+            self.smpl_joints[:, :, :, 2] -= diff_root_height
+            if self.smpl_verts is not None:
+                self.smpl_verts[:, :, :, 2] -= diff_root_height
+
         self.fr = 0
         self.num_fr = self.smpl_joints.shape[1]
 
@@ -174,13 +183,17 @@ class SMPLVisualizer(Visualizer3D):
                 self.pl.camera.focal_point = [0, 0, 0]
                 self.pl.camera.position = [15, 0, 3]
             elif init_args.get('camera') == 'side_near':
+                self.pl.camera.elevation = 0
                 self.pl.camera.up = (0, 0, 1)
                 self.pl.camera.focal_point = [0, -12, 0]
-                self.pl.camera.position = [15, -12, 3]
+                # self.pl.camera.position = [15, -12, 3]
+                self.pl.camera.position = [15, -12, 0]
             elif init_args.get('camera') == 'side_far':
+                self.pl.camera.elevation = 0
                 self.pl.camera.up = (0, 0, 1)
                 self.pl.camera.focal_point = [0, 12, 0]
-                self.pl.camera.position = [15, 12, 3]
+                # self.pl.camera.position = [15, 12, 3]
+                self.pl.camera.position = [15, 12, 0]
         elif init_args.get('court') == 'badminton':
             if init_args.get('camera') == 'front':
                 self.pl.camera.up = (0, 0, 1)
@@ -191,13 +204,17 @@ class SMPLVisualizer(Visualizer3D):
                 self.pl.camera.focal_point = [0, 0, 0]
                 self.pl.camera.position = [15, 0, 3]
             elif init_args.get('camera') == 'side_near':
+                self.pl.camera.elevation = 0
                 self.pl.camera.up = (0, 0, 1)
                 self.pl.camera.focal_point = [0, -3.5, 0]
-                self.pl.camera.position = [15, -3.5, 3]
+                # self.pl.camera.position = [15, -3.5, 3]
+                self.pl.camera.position = [15, -3.5, 0]
             elif init_args.get('camera') == 'side_far':
+                self.pl.camera.elevation = 0
                 self.pl.camera.up = (0, 0, 1)
                 self.pl.camera.focal_point = [0, 3.5, 0]
-                self.pl.camera.position = [15, 3.5, 3]
+                # self.pl.camera.position = [15, 3.5, 3]
+                self.pl.camera.position = [15, 3.5, 0]
 
     def init_scene(self, init_args):
         if init_args is None:
@@ -296,16 +313,25 @@ class SMPLVisualizer(Visualizer3D):
 
         self.update_smpl_seq(init_args.get('smpl_seq', None))
         self.num_actors = init_args.get('num_actors', self.smpl_joints.shape[0])
-        colors = get_color_palette(self.num_actors, colormap='autumn')
+
+        colors = get_color_palette(self.num_actors, colormap='autumn' if self.show_skeleton and not self.show_smpl else 'rainbow')
         if self.show_smpl and self.smpl_verts is not None:
+            if self.num_actors > 1:
+                colors = get_color_palette(self.num_actors, 'rainbow')
+            else:
+                colors = ['#ffca3a']
             vertices = self.smpl_verts[0, 0].cpu().numpy()
             if init_args.get('debug_root'):
                 # Odd actors are final result, even actors are old result
                 self.smpl_actors = [SMPLActor(self.pl, vertices, self.smpl_faces, color='#d00000' if i%2==0 else '#ffca3a') 
                     for i in range(self.num_actors)]
             else:
-                self.smpl_actors = [SMPLActor(self.pl, vertices, self.smpl_faces) for _ in range(self.num_actors)]
+                self.smpl_actors = [SMPLActor(self.pl, vertices, self.smpl_faces, color=colors[a]) for a in range(self.num_actors)]
         if self.show_skeleton:
+            if not self.show_smpl:
+                colors = get_color_palette(self.num_actors, colormap='autumn')
+            else:
+                colors = ['yellow'] * self.num_actors
             self.skeleton_actors = [SkeletonActor(self.pl, self.smpl_joint_parents, bone_color=colors[a]) 
                 for a in range(self.num_actors)]
         
