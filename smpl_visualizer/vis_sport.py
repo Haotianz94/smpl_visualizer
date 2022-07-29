@@ -4,7 +4,7 @@ import numpy as np
 from pyvista.plotting.tools import parse_color
 from vtk import vtkTransform
 from .torch_transform import quat_apply, quat_between_two_vec, quaternion_to_angle_axis, angle_axis_to_quaternion
-from .vis3d import Visualizer3D
+from .vis_pyvista import PyvistaVisualizer
 from .smpl import SMPL, SMPL_MODEL_DIR
 from .vis import make_checker_board_texture, get_color_palette
 
@@ -176,7 +176,7 @@ class RacketActor():
             actor.SetVisibility(flag)
 
 
-class SMPLVisualizer(Visualizer3D):
+class SportVisualizer(PyvistaVisualizer):
 
     def __init__(self, show_smpl=False, show_skeleton=True, show_racket=False, 
         correct_root_height=False, device=torch.device('cpu'), **kwargs):

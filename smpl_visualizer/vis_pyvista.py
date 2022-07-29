@@ -12,7 +12,7 @@ from tqdm import tqdm
 from .vis import images_to_video, make_checker_board_texture, nparray_to_vtk_matrix
 
 
-class Visualizer3D:
+class PyvistaVisualizer:
 
     def __init__(self, init_T=6, enable_shadow=False, anti_aliasing=True, use_floor=False,
                  add_cube=False, distance=5, elevation=20, azimuth=0, verbose=True):
@@ -238,5 +238,5 @@ class Visualizer3D:
 
 if __name__ == '__main__':
 
-    visualizer = Visualizer3D(add_cube=True, enable_shadow=True)
+    visualizer = PyvistaVisualizer(add_cube=True, enable_shadow=True)
     visualizer.show_animation(show_axes=True)

@@ -87,11 +87,13 @@ def vstack_videos(video1_path, video2_path, out_path, crf=25, verbose=True, text
 
 
 
-def make_checker_board_texture(color1='black', color2='white', width=1000, height=1000):
+def make_checker_board_texture(color1='black', color2='white', width=1000, alpha=None):
     c1 = np.asarray(ImageColor.getcolor(color1, 'RGB')).astype(np.uint8)
     c2 = np.asarray(ImageColor.getcolor(color2, 'RGB')).astype(np.uint8)
-    hw = width // 2
-    hh = width // 2
+    if alpha is not None:
+        c1 = np.append(c1, int(alpha*255))
+        c2 = np.append(c2, int(alpha*255))
+    hw = hh = width // 2
     c1_block = np.tile(c1, (hh, hw, 1))
     c2_block = np.tile(c2, (hh, hw, 1))
     tex = np.block([
