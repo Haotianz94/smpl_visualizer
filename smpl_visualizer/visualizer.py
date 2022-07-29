@@ -106,50 +106,118 @@ class SkeletonActor():
             actor.GetProperty().SetColor(rgb_color)
 
 
+class RacketActor():
+
+    def __init__(self, pl, sport='tennis'):
+        self.pl = pl
+        self.sport = sport
+        if self.sport == 'badminton':
+            self.net_mesh = pyvista.Cylinder(center=(0, 0, 0), radius=0.25/2, height=0.01, direction=(0, 0, 1))
+            self.net_mesh.active_t_coords *= 1000
+            tex = pyvista.numpy_to_texture(make_checker_board_texture('#FFFFFF', '#AAAAAA', width=10, height=10))
+            self.net_actor = self.pl.add_mesh(self.net_mesh, texture=tex, ambient=0.2, diffuse=0.8, opacity=0.1, smooth_shading=True)
+
+            self.head_mesh = pyvista.Tube(pointa=(0, 0, -0.005), pointb=(0, 0, 0.005), radius=0.25/2)
+            self.head_actor = self.pl.add_mesh(self.head_mesh, color='black', ambient=0.3, diffuse=0.5, smooth_shading=True)
+
+            self.shaft_mesh = pyvista.Cylinder(center=(0, 0, 0), radius=0.005, height=0.25, direction=(0, 0, 1))
+            self.shaft_actor = self.pl.add_mesh(self.shaft_mesh, color='black', ambient=0.3, diffuse=0.5, smooth_shading=True)
+
+            self.handle_mesh = pyvista.Cylinder(center=(0, 0, 0), radius=0.0254/2, height=0.15, direction=(0, 0, 1))
+            self.handle_actor = self.pl.add_mesh(self.handle_mesh, color='#AAAAAA', ambient=0.3, diffuse=0.5, smooth_shading=True)
+            
+            self.actors = [self.head_actor, self.net_actor, self.shaft_actor, self.handle_actor]
+        elif self.sport == 'tennis':
+            self.net_mesh = pyvista.Cylinder(center=(0, 0, 0), radius=0.15, height=0.01, direction=(0, 0, 1))
+            self.net_mesh.active_t_coords *= 1000
+            tex = pyvista.numpy_to_texture(make_checker_board_texture('#FFFFFF', '#AAAAAA', width=10, height=10))
+            self.net_actor = self.pl.add_mesh(self.net_mesh, texture=tex, ambient=0.2, diffuse=0.8, opacity=0.1, smooth_shading=True)
+
+            self.head_mesh = pyvista.Tube(pointa=(0, 0, -0.01), pointb=(0, 0, 0.01), radius=0.15)
+            self.head_actor = self.pl.add_mesh(self.head_mesh, color='black', ambient=0.3, diffuse=0.5, smooth_shading=True)
+
+            self.shaft_left_mesh = pyvista.Cylinder(center=(0, 0, 0), radius=0.01, height=0.16/np.cos(np.pi/8), direction=(0, 0, 1))
+            self.shaft_left_actor = self.pl.add_mesh(self.shaft_left_mesh, color='black', ambient=0.3, diffuse=0.5, smooth_shading=True)
+
+            self.shaft_right_mesh = pyvista.Cylinder(center=(0, 0, 0), radius=0.01, height=0.16/np.cos(np.pi/8), direction=(0, 0, 1))
+            self.shaft_right_actor = self.pl.add_mesh(self.shaft_right_mesh, color='black', ambient=0.3, diffuse=0.5, smooth_shading=True)
+
+            self.handle_mesh = pyvista.Cylinder(center=(0, 0, 0), radius=0.02, height=0.16, direction=(0, 0, 1))
+            self.handle_actor = self.pl.add_mesh(self.handle_mesh, color='black', ambient=0.3, diffuse=0.5, smooth_shading=True)
+            
+            self.actors = [self.head_actor, self.net_actor, self.shaft_left_actor, self.shaft_right_actor, self.handle_actor]
+
+
+    def update_racket(self, params):
+        def get_transform(new_pos, new_dir):
+            trans = vtkTransform()
+            trans.Translate(new_pos)
+            new_dir = torch.from_numpy(new_dir).float()
+            aa = quaternion_to_angle_axis(quat_between_two_vec(torch.tensor([0., 0., 1.]).expand_as(new_dir), new_dir)).numpy()
+            angle = np.linalg.norm(aa, axis=-1, keepdims=True)
+            axis = aa / (angle + 1e-6)
+            trans.RotateWXYZ(np.rad2deg(angle), *axis)
+            return trans
+
+        if self.sport == 'badminton':
+            self.head_actor.SetUserTransform(get_transform(params['head_center'] + params['root'], params['racket_normal']))
+            self.net_actor.SetUserTransform(get_transform(params['head_center'] + params['root'], params['racket_normal']))
+            self.shaft_actor.SetUserTransform(get_transform(params['shaft_center'] + params['root'], params['racket_dir']))
+            self.handle_actor.SetUserTransform(get_transform(params['handle_center'] + params['root'], params['racket_dir']))
+        elif self.sport == 'tennis':
+            self.head_actor.SetUserTransform(get_transform(params['head_center'] + params['root'], params['racket_normal']))
+            self.net_actor.SetUserTransform(get_transform(params['head_center'] + params['root'], params['racket_normal']))
+            self.shaft_left_actor.SetUserTransform(get_transform(params['shaft_left_center'] + params['root'], params['shaft_left_dir']))
+            self.shaft_right_actor.SetUserTransform(get_transform(params['shaft_right_center'] + params['root'], params['shaft_right_dir']))
+            self.handle_actor.SetUserTransform(get_transform(params['handle_center'] + params['root'], params['racket_dir']))
+    
+    def set_visibility(self, flag):
+        for actor in self.actors:
+            actor.SetVisibility(flag)
+
 
 class SMPLVisualizer(Visualizer3D):
 
-    def __init__(self, show_smpl=False, show_skeleton=True, correct_root_height=False, device=torch.device('cpu'), **kwargs):
+    def __init__(self, show_smpl=False, show_skeleton=True, show_racket=False, 
+        correct_root_height=False, device=torch.device('cpu'), **kwargs):
+        
         super().__init__(**kwargs)
         self.show_smpl = show_smpl
         self.show_skeleton = show_skeleton
+        self.show_racket = show_racket
         self.correct_root_height = correct_root_height
-        # FIXME: what pose type to use
-        self.smpl = SMPL(SMPL_MODEL_DIR, pose_type='body26fk', create_transl=False).to(device)
+        self.smpl = SMPL(SMPL_MODEL_DIR, pose_type='body26fk', create_transl=False, gender='f').to(device)
         faces = self.smpl.faces.copy()       
         self.smpl_faces = faces = np.hstack([np.ones_like(faces[:, [0]]) * 3, faces])
         self.smpl_joint_parents = self.smpl.parents.cpu().numpy()
         self.device = device
         
-    def update_smpl_seq(self, smpl_seq=None):
+    def update_smpl_seq(self, smpl_seq=None, racket_seq=None):
         self.smpl_seq = smpl_seq
         self.smpl_verts = None
 
-        if 'pose' in smpl_seq:
-            pose = smpl_seq['pose'] # num_actor x num_frames x (num_joints x 3)
+        if 'joint_rot' in smpl_seq:
+            joint_rot = smpl_seq['joint_rot'] # num_actor x num_frames x (num_joints x 3)
             trans = smpl_seq['trans'] # num_actor x num_frames x 3
             
-            orig_pose_shape = pose.shape
             self.smpl_motion = self.smpl(
-                global_orient=pose[..., :3].view(-1, 3),
-                body_pose=pose[..., 3:].view(-1, 69),
-                betas=torch.zeros(pose.shape[0]*pose.shape[1], 10).float(),
+                global_orient=joint_rot[..., :3].view(-1, 3),
+                body_pose=joint_rot[..., 3:].view(-1, 69),
+                betas=torch.zeros(joint_rot.shape[0]*joint_rot.shape[1], 10).float(),
                 root_trans = trans.view(-1, 3),
                 return_full_pose=True,
                 orig_joints=True
             )
 
-            self.smpl_verts = self.smpl_motion.vertices.reshape(*orig_pose_shape[:-1], -1, 3)
+            self.smpl_verts = self.smpl_motion.vertices.reshape(*joint_rot.shape[:-1], -1, 3)
             if 'joint_pos' not in smpl_seq:
-                self.smpl_joints = self.smpl_motion.joints.reshape(*orig_pose_shape[:-1], -1, 3)
+                self.smpl_joints = self.smpl_motion.joints.reshape(*joint_rot.shape[:-1], -1, 3)
 
         if 'joint_pos' in smpl_seq:
             joints = smpl_seq['joint_pos'] # num_actor x num_frames x num_joints x 3
-
             trans = smpl_seq['trans'] # num_actor x num_frames x 3
 
             # Orient is None for hybrIK since joints already has global orentation             
-            # orient = smpl_seq['pose'][..., :3].repeat((joints.shape[0], 1, 1))
             orient = smpl_seq['orient']
 
             joints_world = joints
@@ -160,6 +228,13 @@ class SMPLVisualizer(Visualizer3D):
             if trans is not None:
                 joints_world = joints_world + trans.unsqueeze(-2)
             self.smpl_joints = joints_world
+        
+        if racket_seq is not None:
+            num_actors, num_frames = trans.shape[:2]
+            for i in range(num_actors):
+                for j in range(num_frames):
+                    racket_seq[i][j]['root'] = trans[i, j].numpy()
+            self.racket_params = racket_seq
 
         if self.correct_root_height:
             diff_root_height = torch.min(self.smpl_joints[:, :, 10:12, 2], dim=2)[0].view(*trans.shape[:2], 1)
@@ -173,7 +248,7 @@ class SMPLVisualizer(Visualizer3D):
     def init_camera(self, init_args):
         super().init_camera()
 
-        if init_args.get('court') == 'tennis':
+        if init_args.get('sport') == 'tennis':
             if init_args.get('camera') == 'front':
                 self.pl.camera.up = (0, 0, 1)
                 self.pl.camera.focal_point = [0, 0, 0]
@@ -194,7 +269,7 @@ class SMPLVisualizer(Visualizer3D):
                 self.pl.camera.focal_point = [0, 12, 0]
                 # self.pl.camera.position = [15, 12, 3]
                 self.pl.camera.position = [15, 12, 0]
-        elif init_args.get('court') == 'badminton':
+        elif init_args.get('sport') == 'badminton':
             if init_args.get('camera') == 'front':
                 self.pl.camera.up = (0, 0, 1)
                 self.pl.camera.focal_point = [0, 0, 0]
@@ -221,7 +296,7 @@ class SMPLVisualizer(Visualizer3D):
             init_args = dict()
         super().init_scene(init_args)
         # Init tennis court
-        if init_args.get('court') == 'tennis':
+        if init_args.get('sport') == 'tennis':
             # Court
             wlh = (10.97, 11.89*2, 0.05)
             center = np.array([0, 0, -wlh[2] * 0.5])
@@ -259,7 +334,7 @@ class SMPLVisualizer(Visualizer3D):
             tex = pyvista.numpy_to_texture(make_checker_board_texture('#FFFFFF', '#AAAAAA', width=10, height=10))
             self.pl.add_mesh(net_mesh, texture=tex, ambient=0.2, diffuse=0.8, opacity=0.1, smooth_shading=True)
 
-        elif init_args.get('court') == 'badminton':
+        elif init_args.get('sport') == 'badminton':
             # Court
             wlh = (6.1, 13.41, 0.05)
             center = np.array([0, 0, -wlh[2] * 0.5])
@@ -311,7 +386,7 @@ class SMPLVisualizer(Visualizer3D):
         floor_mesh.points[:, 2] -= 0.01
         self.pl.add_mesh(floor_mesh, color='#769771', ambient=0.2, diffuse=0.8, specular=0.8, specular_power=5, smooth_shading=True)
 
-        self.update_smpl_seq(init_args.get('smpl_seq', None))
+        self.update_smpl_seq(init_args.get('smpl_seq', None), init_args.get('racket_seq', None))
         self.num_actors = init_args.get('num_actors', self.smpl_joints.shape[0])
 
         colors = get_color_palette(self.num_actors, colormap='autumn' if self.show_skeleton and not self.show_smpl else 'rainbow')
@@ -334,6 +409,10 @@ class SMPLVisualizer(Visualizer3D):
                 colors = ['yellow'] * self.num_actors
             self.skeleton_actors = [SkeletonActor(self.pl, self.smpl_joint_parents, bone_color=colors[a]) 
                 for a in range(self.num_actors)]
+        
+        if self.show_racket:
+            self.racket_actors = [RacketActor(self.pl, init_args.get('sport')) 
+                for _ in range(self.num_actors)]
         
     def update_camera(self, interactive):
         pass
@@ -367,6 +446,14 @@ class SMPLVisualizer(Visualizer3D):
                     actor.update_joints(self.smpl_joints[i, self.fr].cpu().numpy())
                     actor.set_visibility(True)
                     actor.set_opacity(1.0)
+        
+        if self.show_racket:
+            for i, actor in enumerate(self.racket_actors):
+                if self.smpl_joints[i, self.fr].sum() == 0:
+                    actor.set_visibility(False)
+                else:
+                    actor.update_racket(self.racket_params[i][self.fr])
+                    actor.set_visibility(True)
 
     def setup_key_callback(self):
         super().setup_key_callback()
