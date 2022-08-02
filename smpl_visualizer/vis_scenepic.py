@@ -2,8 +2,7 @@ import torch
 import numpy as np
 import scenepic as sp
 from .smpl import SMPL, SMPL_MODEL_DIR, BASE_DIR
-from .torch_transform import quat_apply, quat_between_two_vec, quaternion_to_angle_axis, angle_axis_to_quaternion
-from vtk import vtkTransform
+from .torch_transform import quat_between_two_vec, quaternion_to_angle_axis
 from .vis import make_checker_board_texture, get_color_palette
 from tqdm import tqdm
 from PIL import Image
@@ -38,8 +37,9 @@ class SportVisualizerHTML():
 
         aspect_ratio = img_width / img_height
        
-        return sp.Camera(center=(10, 0, 3), look_at=(0, 0, 0), up_dir=(0, 0, 1), 
-                         fov_y_degrees=45.0, aspect_ratio=aspect_ratio, far_crop_distance=40)
+        return sp.Camera(center=(0, -25, 3) if self.sport=='tennis' else (0, -13, 3), 
+                         look_at=(0, 0, 0), up_dir=(0, 0, 1), 
+                         fov_y_degrees=45.0, aspect_ratio=aspect_ratio, far_crop_distance=80)
 
     def load_camera_from_ext_int(self, extrinsics, intrinsics):
         # this function loads an "OpenCV"-style camera representation
@@ -104,41 +104,60 @@ class SportVisualizerHTML():
     def create_court(self, scene, frame):
         if self.sport == 'tennis':
             # Court
+            court_mesh = scene.create_mesh()
+
             wlh = (10.97, 11.89*2, 0.05)
             center = np.array([0, 0, -wlh[2] * 0.5])
-            court_mesh = pyvista.Cube(center, *wlh)
-            self.pl.add_mesh(court_mesh, color='#4A609D', ambient=0.2, diffuse=0.8, specular=0, smooth_shading=True)
+            court_mesh.add_cube(
+                color=np.array([74, 96, 157]) / 255., 
+                transform=np.dot(sp.Transforms.Translate(center), sp.Transforms.Scale(wlh)))
 
             # Court lines (vertical)
             for x, l in zip([-10.97/2, -8.23/2, 0, 8.23/2, 10.97/2], [23.77, 23.77, 12.8, 23.77, 23.77]):
                 wlh = (0.05, l, 0.05)
-                center = np.array([x, 0, -wlh[2] * 0.5])
-                court_line_mesh = pyvista.Cube(center, *wlh)
-                court_line_mesh.points[:, 2] += 0.01
-                self.pl.add_mesh(court_line_mesh, color='#FFFFFF', ambient=0.2, diffuse=0.8, specular=0.8, specular_power=5, smooth_shading=True)
-            
+                center = np.array([x, 0, -wlh[2] * 0.5 + 0.01])
+                court_mesh.add_cube(
+                    color=(1, 1, 1), 
+                    transform=np.dot(sp.Transforms.Translate(center), sp.Transforms.Scale(wlh)))
+
             # Court lines (horizontal)
             for y, w in zip([-11.89, -6.4, 0, 6.4, 11.89], [10.97, 8.23, 10.97, 8.23, 10.97]):
                 wlh = (w, 0.05, 0.05)
-                center = np.array([0, y, -wlh[2] * 0.5])
-                court_line_mesh = pyvista.Cube(center, *wlh)
-                court_line_mesh.points[:, 2] += 0.01
-                self.pl.add_mesh(court_line_mesh, color='#FFFFFF', ambient=0.2, diffuse=0.8, specular=0.8, specular_power=5, smooth_shading=True)
-            
+                center = np.array([0, y, -wlh[2] * 0.5 + 0.01])
+                court_mesh.add_cube(
+                    color=(1, 1, 1), 
+                    transform=np.dot(sp.Transforms.Translate(center), sp.Transforms.Scale(wlh)))  
+
+            frame.add_mesh(court_mesh)
+
             # Post
+            post_mesh = scene.create_mesh()            
             for x in [-0.91-10.97/2, 0.91+10.97/2]:
                 wlh = (0.05, 0.05, 1.2)
                 center = np.array([x, 0, wlh[2] * 0.5])
-                post_mesh = pyvista.Cube(center, *wlh)
-                self.pl.add_mesh(post_mesh, color='#BD7427', ambient=0.2, diffuse=0.8, specular=0.8, specular_power=5, smooth_shading=True)
-            
+                post_mesh.add_cube(
+                    color=np.array([189, 116, 39]) / 255., 
+                    transform=np.dot(sp.Transforms.Translate(center), sp.Transforms.Scale(wlh)))
+            frame.add_mesh(post_mesh)
+
             # Net
             wlh = (10.97+0.91*2, 0.01, 1.07)
             center = np.array([0, 0, 1.07/2])
-            net_mesh = pyvista.Cube(center, *wlh)
-            net_mesh.active_t_coords *= 1000
-            tex = pyvista.numpy_to_texture(make_checker_board_texture('#FFFFFF', '#AAAAAA', width=10, height=10))
-            self.pl.add_mesh(net_mesh, texture=tex, ambient=0.2, diffuse=0.8, opacity=0.1, smooth_shading=True)
+            net_texture = scene.create_image(image_id="net")
+            # Failed to use checker_board texture because scenepic does not support uv > 1 
+            # checker_board = make_checker_board_texture('#FFFFFF', '#AAAAAA', width=10)
+            # net_texture.from_numpy(checker_board)
+            net_texture.load(NET_TEXTURE_PATH)
+            net_mesh = scene.create_mesh(double_sided=True, use_texture_alpha=True, texture_id='net')
+            net_mesh.add_image(
+                origin=(-wlh[0]/2, 0, 0),
+                x_axis=(wlh[0], 0, 0),
+                y_axis=(0, 0, wlh[2]),
+                uv_1=(1, 0),
+                uv_2=(1, wlh[2]/wlh[0]),
+                uv_3=(0, wlh[2]/wlh[0]),
+            )
+            frame.add_mesh(net_mesh)
 
         elif self.sport == 'badminton':
             # Court
@@ -186,24 +205,17 @@ class SportVisualizerHTML():
             # Net
             wlh = (6.1, 0.01, 0.79)
             center = np.array([0, 0, (0.76+1.55)/2])
-
             net_texture = scene.create_image(image_id="net")
-            # checker_board = make_checker_board_texture('#FFFFFF', '#AAAAAA', width=10)
-            # checker_board = make_checker_board_texture('#FF0000', '#00FF00', width=1000, alpha=0.5)
-            # img = Image.fromarray(checker_board, 'RGBA') 
-            # img.save('net.png')
-            # net_texture.from_numpy(checker_board)
             net_texture.load(NET_TEXTURE_PATH)
             net_mesh = scene.create_mesh(double_sided=True, use_texture_alpha=True, texture_id='net')
             net_mesh.add_image(
-                origin=(-6.1/2, 0, 0.76),
-                x_axis=(6.1, 0, 0),
-                y_axis=(0, 0, 0.79),
+                origin=(-wlh[0]/2, 0, 0.76),
+                x_axis=(wlh[0], 0, 0),
+                y_axis=(0, 0, wlh[2]),
                 uv_1=(1, 0),
-                uv_2=(1, 0.79/6.1),
-                uv_3=(0, 0.79/6.1),
+                uv_2=(1, wlh[2]/wlh[0]),
+                uv_3=(0, wlh[2]/wlh[0]),
             )
-
             frame.add_mesh(net_mesh)
 
         # Floor
@@ -216,6 +228,7 @@ class SportVisualizerHTML():
         frame.add_mesh(floor_mesh)
     
     def create_racket(self, scene, params):
+        # TODO: replace with an artist created racket mesh 
         if params is None: return None
 
         def get_transform(scale, trans, new_dir, old_dir=[1., 0., 0.]):
@@ -229,32 +242,47 @@ class SportVisualizerHTML():
             return trans.dot(rotation.dot(scale))
 
         if self.sport == 'tennis':
-            pass
-        elif self.sport == 'badminton':
-            # self.head_actor.SetUserTransform(get_transform(params['head_center'] + params['root'], params['racket_normal']))
-            # self.net_actor.SetUserTransform(get_transform(params['head_center'] + params['root'], params['racket_normal']))
-            # self.shaft_actor.SetUserTransform(get_transform(params['shaft_center'] + params['root'], params['racket_dir']))
-            # self.handle_actor.SetUserTransform(get_transform(params['handle_center'] + params['root'], params['racket_dir']))
-
             racket_mesh = scene.create_mesh()
-            # Handle
-            racket_mesh.add_cylinder(
-                color=np.array([0, 0, 0]) / 255., 
+            # Head
+            racket_mesh.add_disc(
+                color=np.array([50, 50, 50]) / 255.,
+                segment_count=50,
+                fill_triangles=False,  
+                add_wireframe=True,  
                 transform=get_transform(
-                    scale=[0.15, 0.0254, 0.0254],
-                    trans=params['handle_center'] + params['root'], 
-                    new_dir=params['racket_dir']
+                    scale=[1, 0.3, 0.26],
+                    trans=params['head_center'] + params['root'], 
+                    new_dir=params['racket_normal']
             ))
             # Shaft
             racket_mesh.add_cylinder(
-                color=np.array([0, 0, 0]) / 255., 
+                color=np.array([50, 50, 50]) / 255., 
                 transform=get_transform(
-                    scale=[0.25, 0.01, 0.01],
-                    trans=params['shaft_center'] + params['root'], 
+                    scale=[0.12/np.cos(np.pi/10), 0.02, 0.02],
+                    trans=params['shaft_left_center'] + params['root'], 
+                    new_dir=params['shaft_left_dir']
+            ))
+            racket_mesh.add_cylinder(
+                color=np.array([50, 50, 50]) / 255., 
+                transform=get_transform(
+                    scale=[0.12/np.cos(np.pi/10), 0.015, 0.015],
+                    trans=params['shaft_right_center'] + params['root'], 
+                    new_dir=params['shaft_right_dir']
+            ))
+            # Handle
+            racket_mesh.add_cylinder(
+                color=np.array([50, 50, 50]) / 255., 
+                transform=get_transform(
+                    scale=[0.16, 0.03, 0.03],
+                    trans=params['handle_center'] + params['root'], 
                     new_dir=params['racket_dir']
             ))
+        elif self.sport == 'badminton':
+            racket_mesh = scene.create_mesh()
+            
+            # Head
             racket_mesh.add_disc(
-                color=np.array([150, 150, 150]) / 255.,
+                color=np.array([50, 50, 50]) / 255.,
                 segment_count=50,
                 fill_triangles=False,  
                 add_wireframe=True,  
@@ -263,7 +291,22 @@ class SportVisualizerHTML():
                     trans=params['head_center'] + params['root'], 
                     new_dir=params['racket_normal']
             ))
-            
+            # Shaft
+            racket_mesh.add_cylinder(
+                color=np.array([50, 50, 50]) / 255., 
+                transform=get_transform(
+                    scale=[0.25, 0.01, 0.01],
+                    trans=params['shaft_center'] + params['root'], 
+                    new_dir=params['racket_dir']
+            ))
+            # Handle
+            racket_mesh.add_cylinder(
+                color=np.array([50, 50, 50]) / 255., 
+                transform=get_transform(
+                    scale=[0.15, 0.0254, 0.0254],
+                    trans=params['handle_center'] + params['root'], 
+                    new_dir=params['racket_dir']
+            ))
         return racket_mesh
 
             
@@ -298,7 +341,6 @@ class SportVisualizerHTML():
                 if racket_mesh is not None: frame.add_mesh(racket_mesh)
 
             frame.camera = self.load_default_camera(cam_intrinsics)
-
         return canvas
 
     def save_animation_as_html(self, init_args, html_path="demo.html"):
@@ -308,13 +350,11 @@ class SportVisualizerHTML():
         self.image_height = init_args.get('image_height', 1080)
         self.sport = init_args.get('sport', 'tennis')
         self.correct_root_height = init_args.get('correct_root_height')
+
         self.init_players_and_rackets(smpl_seq=init_args.get('smpl_seq'), 
             racket_seq=init_args.get('racket_seq'))
 
         self.create_canvas(scene)
-        # if smpl_seq_gt is not None:
-        #     canvas_gt = self.create_canvas(scene, smpl_seq_gt, img_width, img_height, cam_intrinsics)
-        # if smpl_seq_gt is not None:
-        #     scene.link_canvas_events(canvas_pred, canvas_gt)
+
         scene.save_as_html(html_path, title="sport visualizer")
         print(f"Saved animation as html into {html_path}")

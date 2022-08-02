@@ -136,13 +136,13 @@ class RacketActor():
             self.head_mesh = pyvista.Tube(pointa=(0, 0, -0.01), pointb=(0, 0, 0.01), radius=0.15)
             self.head_actor = self.pl.add_mesh(self.head_mesh, color='black', ambient=0.3, diffuse=0.5, smooth_shading=True)
 
-            self.shaft_left_mesh = pyvista.Cylinder(center=(0, 0, 0), radius=0.01, height=0.16/np.cos(np.pi/8), direction=(0, 0, 1))
+            self.shaft_left_mesh = pyvista.Cylinder(center=(0, 0, 0), radius=0.015/2, height=0.12/np.cos(np.pi/10), direction=(0, 0, 1))
             self.shaft_left_actor = self.pl.add_mesh(self.shaft_left_mesh, color='black', ambient=0.3, diffuse=0.5, smooth_shading=True)
 
-            self.shaft_right_mesh = pyvista.Cylinder(center=(0, 0, 0), radius=0.01, height=0.16/np.cos(np.pi/8), direction=(0, 0, 1))
+            self.shaft_right_mesh = pyvista.Cylinder(center=(0, 0, 0), radius=0.015/2, height=0.12/np.cos(np.pi/10), direction=(0, 0, 1))
             self.shaft_right_actor = self.pl.add_mesh(self.shaft_right_mesh, color='black', ambient=0.3, diffuse=0.5, smooth_shading=True)
 
-            self.handle_mesh = pyvista.Cylinder(center=(0, 0, 0), radius=0.02, height=0.16, direction=(0, 0, 1))
+            self.handle_mesh = pyvista.Cylinder(center=(0, 0, 0), radius=0.03/2, height=0.16, direction=(0, 0, 1))
             self.handle_actor = self.pl.add_mesh(self.handle_mesh, color='black', ambient=0.3, diffuse=0.5, smooth_shading=True)
             
             self.actors = [self.head_actor, self.net_actor, self.shaft_left_actor, self.shaft_right_actor, self.handle_actor]
