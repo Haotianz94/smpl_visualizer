@@ -39,7 +39,7 @@ class SportVisualizerHTML():
         aspect_ratio = img_width / img_height
        
         return sp.Camera(center=(10, 0, 3), look_at=(0, 0, 0), up_dir=(0, 0, 1), 
-                         fov_y_degrees=45.0, aspect_ratio=aspect_ratio)
+                         fov_y_degrees=45.0, aspect_ratio=aspect_ratio, far_crop_distance=40)
 
     def load_camera_from_ext_int(self, extrinsics, intrinsics):
         # this function loads an "OpenCV"-style camera representation
@@ -84,27 +84,12 @@ class SportVisualizerHTML():
             self.smpl_verts = self.smpl_motion.vertices.reshape(*joint_rot.shape[:-1], -1, 3)
             self.smpl_joints = self.smpl_motion.joints.reshape(*joint_rot.shape[:-1], -1, 3)
 
-        # if 'joint_pos' in smpl_seq:
-        #     joints = smpl_seq['joint_pos'] # num_actor x num_frames x num_joints x 3
-        #     trans = smpl_seq['trans'] # num_actor x num_frames x 3
-
-        #     # Orient is None for hybrIK since joints already has global orentation             
-        #     orient = smpl_seq['orient']
-
-        #     joints_world = joints
-        #     if orient is not None:
-        #         joints_world = torch.cat([torch.zeros_like(joints[..., :3]), joints], dim=-1).view(*joints.shape[:-1], -1, 3)
-        #         orient_q = angle_axis_to_quaternion(orient).unsqueeze(-2).expand(joints.shape[:-1] + (4,))
-        #         joints_world = quat_apply(orient_q, joints_world)
-        #     if trans is not None:
-        #         joints_world = joints_world + trans.unsqueeze(-2)
-        #     self.smpl_joints = joints_world
-        
         if racket_seq is not None:
             num_actors, num_frames = trans.shape[:2]
             for i in range(num_actors):
                 for j in range(num_frames):
-                    racket_seq[i][j]['root'] = trans[i, j].numpy()
+                    if racket_seq[i][j] is not None:
+                        racket_seq[i][j]['root'] = trans[i, j].numpy()
             self.racket_params = racket_seq
 
         if self.correct_root_height:
@@ -231,6 +216,8 @@ class SportVisualizerHTML():
         frame.add_mesh(floor_mesh)
     
     def create_racket(self, scene, params):
+        if params is None: return None
+
         def get_transform(scale, trans, new_dir, old_dir=[1., 0., 0.]):
             trans = sp.Transforms.Translate(trans)
             scale = sp.Transforms.Scale(scale)
@@ -294,14 +281,21 @@ class SportVisualizerHTML():
             
             self.create_court(scene, frame)
 
+            colors = get_color_palette(self.num_actors, 'rainbow', use_float=True)
             for j in range(self.num_actors):
-                smpl_mesh = scene.create_mesh(shared_color=(0.7, 0.7, 0.7))
-                smpl_mesh.add_mesh_without_normals(self.smpl_verts[j, i].contiguous().numpy(), self.smpl_faces)
-                frame.add_mesh(smpl_mesh)
+                if self.num_actors == 1:
+                    smpl_mesh = scene.create_mesh(shared_color=(0.7, 0.7, 0.7))
+                elif self.num_actors == 2:
+                    smpl_mesh = scene.create_mesh(shared_color=(0.7, 0.7, 0.7) if j == 0 else (0.5, 0.5, 0.5))
+                else:
+                    smpl_mesh = scene.create_mesh(shared_color=colors[j])
+                if self.smpl_seq['joint_rot'][j, i].sum() != 0:
+                    smpl_mesh.add_mesh_without_normals(self.smpl_verts[j, i].contiguous().numpy(), self.smpl_faces)
+                    frame.add_mesh(smpl_mesh)
 
                 if self.racket_params is not None:
                     racket_mesh = self.create_racket(scene, self.racket_params[j][i])
-                frame.add_mesh(racket_mesh)
+                if racket_mesh is not None: frame.add_mesh(racket_mesh)
 
             frame.camera = self.load_default_camera(cam_intrinsics)
 

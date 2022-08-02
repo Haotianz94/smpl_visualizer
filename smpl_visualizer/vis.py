@@ -180,8 +180,9 @@ def draw_keypoints(img, keypoints, confidence, size=4, color=(255, 0, 255)):
     return img
 
 
-def get_color_palette(n, colormap='rainbow'):
+def get_color_palette(n, colormap='rainbow', use_float=False):
     cmap = plt.get_cmap(colormap)
     colors = [cmap(i) for i in np.linspace(0, 1, n)]
-    colors = [[int(c[0] * 255), int(c[1] * 255), int(c[2] * 255)] for c in colors]
+    unit = 1 if use_float else 255
+    colors = [[int(c[0] * unit), int(c[1] * unit), int(c[2] * unit)] for c in colors]
     return colors

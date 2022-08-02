@@ -114,7 +114,7 @@ class RacketActor():
         if self.sport == 'badminton':
             self.net_mesh = pyvista.Cylinder(center=(0, 0, 0), radius=0.25/2, height=0.01, direction=(0, 0, 1))
             self.net_mesh.active_t_coords *= 1000
-            tex = pyvista.numpy_to_texture(make_checker_board_texture('#FFFFFF', '#AAAAAA', width=10, height=10))
+            tex = pyvista.numpy_to_texture(make_checker_board_texture('#FFFFFF', '#AAAAAA', width=10))
             self.net_actor = self.pl.add_mesh(self.net_mesh, texture=tex, ambient=0.2, diffuse=0.8, opacity=0.1, smooth_shading=True)
 
             self.head_mesh = pyvista.Tube(pointa=(0, 0, -0.005), pointb=(0, 0, 0.005), radius=0.25/2)
@@ -130,7 +130,7 @@ class RacketActor():
         elif self.sport == 'tennis':
             self.net_mesh = pyvista.Cylinder(center=(0, 0, 0), radius=0.15, height=0.01, direction=(0, 0, 1))
             self.net_mesh.active_t_coords *= 1000
-            tex = pyvista.numpy_to_texture(make_checker_board_texture('#FFFFFF', '#AAAAAA', width=10, height=10))
+            tex = pyvista.numpy_to_texture(make_checker_board_texture('#FFFFFF', '#AAAAAA', width=10))
             self.net_actor = self.pl.add_mesh(self.net_mesh, texture=tex, ambient=0.2, diffuse=0.8, opacity=0.1, smooth_shading=True)
 
             self.head_mesh = pyvista.Tube(pointa=(0, 0, -0.01), pointb=(0, 0, 0.01), radius=0.15)
@@ -233,7 +233,8 @@ class SportVisualizer(PyvistaVisualizer):
             num_actors, num_frames = trans.shape[:2]
             for i in range(num_actors):
                 for j in range(num_frames):
-                    racket_seq[i][j]['root'] = trans[i, j].numpy()
+                    if racket_seq[i][j] is not None:
+                        racket_seq[i][j]['root'] = trans[i, j].numpy()
             self.racket_params = racket_seq
 
         if self.correct_root_height:
@@ -331,7 +332,7 @@ class SportVisualizer(PyvistaVisualizer):
             center = np.array([0, 0, 1.07/2])
             net_mesh = pyvista.Cube(center, *wlh)
             net_mesh.active_t_coords *= 1000
-            tex = pyvista.numpy_to_texture(make_checker_board_texture('#FFFFFF', '#AAAAAA', width=10, height=10))
+            tex = pyvista.numpy_to_texture(make_checker_board_texture('#FFFFFF', '#AAAAAA', width=10))
             self.pl.add_mesh(net_mesh, texture=tex, ambient=0.2, diffuse=0.8, opacity=0.1, smooth_shading=True)
 
         elif init_args.get('sport') == 'badminton':
@@ -375,7 +376,7 @@ class SportVisualizer(PyvistaVisualizer):
             center = np.array([0, 0, (0.76+1.55)/2])
             net_mesh = pyvista.Cube(center, *wlh)
             net_mesh.active_t_coords *= 1000
-            tex = pyvista.numpy_to_texture(make_checker_board_texture('#FFFFFF', '#AAAAAA', width=10, height=10))
+            tex = pyvista.numpy_to_texture(make_checker_board_texture('#FFFFFF', '#AAAAAA', width=10))
             self.pl.add_mesh(net_mesh, texture=tex, ambient=0.2, diffuse=0.8, opacity=0.1, smooth_shading=True)
             
 
@@ -391,10 +392,12 @@ class SportVisualizer(PyvistaVisualizer):
 
         colors = get_color_palette(self.num_actors, colormap='autumn' if self.show_skeleton and not self.show_smpl else 'rainbow')
         if self.show_smpl and self.smpl_verts is not None:
-            if self.num_actors > 1:
-                colors = get_color_palette(self.num_actors, 'rainbow')
-            else:
+            if self.num_actors == 1:
                 colors = ['#ffca3a']
+            elif self.num_actors == 2:
+                colors = ['#000000', '#000000']
+            else:
+                colors = get_color_palette(self.num_actors, 'rainbow')
             vertices = self.smpl_verts[0, 0].cpu().numpy()
             if init_args.get('debug_root'):
                 # Odd actors are final result, even actors are old result
