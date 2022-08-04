@@ -11,9 +11,8 @@ NET_TEXTURE_PATH = BASE_DIR + 'net_texture.png'
 
 class SportVisualizerHTML():
     def __init__(self, device=torch.device('cpu')):
-        self.smpl_female = SMPL(SMPL_MODEL_DIR, gender='female', create_transl=True).to(device)
-        self.smpl_faces = self.smpl_female.faces
-        self.smpl = SMPL(SMPL_MODEL_DIR, pose_type='body26fk', create_transl=False, gender='f').to(device)
+        self.smpl = SMPL(SMPL_MODEL_DIR, create_transl=False).to(device)
+        self.smpl_faces = self.smpl.faces
         self.racket_params = None
     
     def get_camera_intrinsics(self, width=1920, height=1080):
@@ -75,7 +74,7 @@ class SportVisualizerHTML():
             self.smpl_motion = self.smpl(
                 global_orient=joint_rot[..., :3].view(-1, 3),
                 body_pose=joint_rot[..., 3:].view(-1, 69),
-                betas=torch.zeros(joint_rot.shape[0]*joint_rot.shape[1], 10).float(),
+                betas=smpl_seq['betas'].view(-1, 1, 10).expand(-1, joint_rot.shape[1], 10).reshape(-1, 10),
                 root_trans = trans.view(-1, 3),
                 return_full_pose=True,
                 orig_joints=True

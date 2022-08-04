@@ -186,7 +186,7 @@ class SportVisualizer(PyvistaVisualizer):
         self.show_skeleton = show_skeleton
         self.show_racket = show_racket
         self.correct_root_height = correct_root_height
-        self.smpl = SMPL(SMPL_MODEL_DIR, pose_type='body26fk', create_transl=False, gender='f').to(device)
+        self.smpl = SMPL(SMPL_MODEL_DIR, create_transl=False).to(device)
         faces = self.smpl.faces.copy()       
         self.smpl_faces = faces = np.hstack([np.ones_like(faces[:, [0]]) * 3, faces])
         self.smpl_joint_parents = self.smpl.parents.cpu().numpy()
@@ -203,7 +203,7 @@ class SportVisualizer(PyvistaVisualizer):
             self.smpl_motion = self.smpl(
                 global_orient=joint_rot[..., :3].view(-1, 3),
                 body_pose=joint_rot[..., 3:].view(-1, 69),
-                betas=torch.zeros(joint_rot.shape[0]*joint_rot.shape[1], 10).float(),
+                betas=smpl_seq['betas'].view(-1, 1, 10).expand(-1, joint_rot.shape[1], 10).reshape(-1, 10),
                 root_trans = trans.view(-1, 3),
                 return_full_pose=True,
                 orig_joints=True
@@ -392,10 +392,8 @@ class SportVisualizer(PyvistaVisualizer):
 
         colors = get_color_palette(self.num_actors, colormap='autumn' if self.show_skeleton and not self.show_smpl else 'rainbow')
         if self.show_smpl and self.smpl_verts is not None:
-            if self.num_actors == 1:
-                colors = ['#ffca3a']
-            elif self.num_actors == 2:
-                colors = ['#000000', '#000000']
+            if self.num_actors <= 2:
+                colors = ['#ffca3a'] * self.num_actors
             else:
                 colors = get_color_palette(self.num_actors, 'rainbow')
             vertices = self.smpl_verts[0, 0].cpu().numpy()
