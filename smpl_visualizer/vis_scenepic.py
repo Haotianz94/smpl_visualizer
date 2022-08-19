@@ -82,6 +82,13 @@ class SportVisualizerHTML():
 
             self.smpl_verts = self.smpl_motion.vertices.reshape(*joint_rot.shape[:-1], -1, 3)
             self.smpl_joints = self.smpl_motion.joints.reshape(*joint_rot.shape[:-1], -1, 3)
+        
+        if self.correct_root_height:
+            diff_root_height = torch.min(self.smpl_joints[:, :, 10:12, 2], dim=2)[0].view(*trans.shape[:2], 1)
+            self.smpl_joints[:, :, :, 2] -= diff_root_height
+            if self.smpl_verts is not None:
+                self.smpl_verts[:, :, :, 2] -= diff_root_height
+            trans[:, :, 2:] -= diff_root_height
 
         if racket_seq is not None:
             num_actors, num_frames = trans.shape[:2]
@@ -90,12 +97,6 @@ class SportVisualizerHTML():
                     if racket_seq[i][j] is not None:
                         racket_seq[i][j]['root'] = trans[i, j].numpy()
             self.racket_params = racket_seq
-
-        if self.correct_root_height:
-            diff_root_height = torch.min(self.smpl_joints[:, :, 10:12, 2], dim=2)[0].view(*trans.shape[:2], 1)
-            self.smpl_joints[:, :, :, 2] -= diff_root_height
-            if self.smpl_verts is not None:
-                self.smpl_verts[:, :, :, 2] -= diff_root_height
 
         self.num_actors = self.smpl_joints.shape[0]
         self.num_fr = self.smpl_joints.shape[1]

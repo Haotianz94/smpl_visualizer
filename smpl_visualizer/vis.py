@@ -4,9 +4,7 @@ import os.path as osp
 import subprocess
 import platform
 import vtk
-import random
 import cv2 as cv
-import seaborn as sns
 from PIL import ImageColor
 import matplotlib.pyplot as plt
 
@@ -130,47 +128,6 @@ def vtk_matrix_to_nparray(matrix):
         for j in range(array.shape[1]):
             array[i, j] = matrix.GetElement(i, j)
     return array
-
-
-def random_color(seed):
-    """Random a color according to the input seed."""
-    random.seed(seed)
-    colors = sns.color_palette()
-    color = random.choice(colors)
-    return color
-
-
-def draw_tracks(img, bbox, idx, score, thickness=2, font_scale=0.4, text_height=10, text_width=15):
-    # taken from mmtracking
-    x1, y1, x2, y2 = bbox.astype(np.int32)
-
-    # bbox
-    bbox_color = random_color(idx)
-    bbox_color = [int(255 * _c) for _c in bbox_color][::-1]
-    cv.rectangle(img, (x1, y1), (x2, y2), bbox_color, thickness=thickness)
-
-    # id
-    text = str(idx)
-    width = len(text) * text_width
-    img[y1:y1 + text_height, x1:x1 + width, :] = bbox_color
-    cv.putText(
-        img,
-        str(idx), (x1, y1 + text_height - 2),
-        cv.FONT_HERSHEY_COMPLEX,
-        font_scale,
-        color=(0, 0, 0))
-
-    # score
-    text = '{:.02f}'.format(score)
-    width = len(text) * text_width
-    img[y1 - text_height:y1, x1:x1 + width, :] = bbox_color
-    cv.putText(
-        img,
-        text, (x1, y1 - 2),
-        cv.FONT_HERSHEY_COMPLEX,
-        font_scale,
-        color=(0, 0, 0))
-    return img
 
 
 def draw_keypoints(img, keypoints, confidence, size=4, color=(255, 0, 255)):

@@ -281,11 +281,23 @@ class SMPL(_SMPL):
             self.joint_names = get_ordered_joint_names(kwargs['pose_type'] )
         else:
             self.joint_names = JOINT_NAMES
+        if 'device' in kwargs.keys():
+            self.device = kwargs['device']
+        else:
+            self.device = torch.device('cpu')
 
         joints = [JOINT_MAP[i] for i in self.joint_names]
         # J_regressor_extra = np.load(JOINT_REGRESSOR_TRAIN_EXTRA)
         # self.register_buffer('J_regressor_extra', torch.tensor(J_regressor_extra, dtype=torch.float32))
-        self.joint_map = torch.tensor(joints, dtype=torch.long)
+        self.joint_map = torch.tensor(joints, dtype=torch.long).to(self.device)
+            
+        joint_pos_bind = torch.matmul(self.J_regressor, self.v_template).to(self.device)
+        joint_pos_bind_rel = joint_pos_bind.clone()
+        joint_pos_bind_rel[1:] -= joint_pos_bind[self.parents[1:]]
+        joint_pos_bind_rel[0] = 0
+        if 'batch_size' in kwargs.keys():
+            joint_pos_bind_rel = joint_pos_bind_rel.repeat((kwargs['batch_size'], 1, 1))
+        self.joint_pos_bind_rel = joint_pos_bind_rel
 
     def forward(self, *args, root_trans=None, root_scale=None, orig_joints=False, **kwargs):
         """
@@ -317,15 +329,18 @@ class SMPL(_SMPL):
         return output
 
     def get_joints(self, betas=None, body_pose=None, global_orient=None, transl=None,
-                   pose2rot=True, root_trans=None, root_scale=None, dtype=torch.float32):
+                   pose2rot=True, root_trans=None, root_scale=None, no_orient=False, dtype=torch.float32):
         # If no shape and lib parameters are passed along, then use the
         # ones from the module
-
-        pose = torch.cat([global_orient, body_pose], dim=1)
+        if no_orient:
+            pose = body_pose
+        else:
+            pose = torch.cat([global_orient, body_pose], dim=1)
 
         """ LBS """
         batch_size = pose.shape[0]
-        J = torch.matmul(self.J_regressor, self.v_template).repeat((batch_size, 1, 1))
+        # J = torch.matmul(self.J_regressor, self.v_template).repeat((batch_size, 1, 1))
+        J = self.joint_pos_bind[:batch_size, ...].unsqueeze(-1)
         if pose2rot:
             rot_mats = batch_rodrigues(pose.view(-1, 3)).view([batch_size, -1, 3, 3])
         else:
@@ -342,6 +357,42 @@ class SMPL(_SMPL):
             joints[:] = (joints - cur_root_trans) * root_scale[:, None, None] + root_trans[:, None, :]
 
         return joints
+    
+    def get_joints_fast(self, pose=None, root_trans=None):
+        # If no shape and lib parameters are passed along, then use the
+        # ones from the module
+
+        """ LBS """
+        pdb.set_trace()
+
+        batch_size = pose.shape[0]
+        rot_mats = pose.view(batch_size, -1, 3, 3)
+        joints = self.joint_pos_bind[:batch_size, ...].unsqueeze(-1)
+
+        rel_joints = joints.clone()
+        rel_joints[:, 1:] -= joints[:, self.parents[1:]]
+
+        transforms_mat = transform_mat(
+            rot_mats.reshape(-1, 3, 3),
+            rel_joints.reshape(-1, 3, 1)).reshape(-1, joints.shape[1], 4, 4)
+
+        transform_chain = [transforms_mat[:, 0]]
+        for i in range(1, self.parents.shape[0]):
+            # Subtract the joint location at the rest pose
+            # No need for rotation, since it's identity when at rest
+            curr_res = torch.matmul(transform_chain[self.parents[i]],
+                                    transforms_mat[:, i])
+            transform_chain.append(curr_res)
+
+        transforms = torch.stack(transform_chain, dim=1)
+
+        # The last column of the transformations contains the posed joints
+        posed_joints = transforms[:, :, :3, 3]
+
+        if root_trans is not None:
+            posed_joints = posed_joints + root_trans[:, None, :]
+
+        return posed_joints
         
 
 def get_smpl_faces():

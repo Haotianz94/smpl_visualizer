@@ -1,8 +1,10 @@
 import pyvista
 import torch
 import numpy as np
+import platform
 from pyvista.plotting.tools import parse_color
 from vtk import vtkTransform
+import pdb
 from .torch_transform import quat_apply, quat_between_two_vec, quaternion_to_angle_axis, angle_axis_to_quaternion
 from .vis_pyvista import PyvistaVisualizer
 from .smpl import SMPL, SMPL_MODEL_DIR
@@ -147,7 +149,6 @@ class RacketActor():
             
             self.actors = [self.head_actor, self.net_actor, self.shaft_left_actor, self.shaft_right_actor, self.handle_actor]
 
-
     def update_racket(self, params):
         def get_transform(new_pos, new_dir):
             trans = vtkTransform()
@@ -176,20 +177,117 @@ class RacketActor():
             actor.SetVisibility(flag)
 
 
+class TargetRecoveryActor():
+
+    def __init__(self, pl):
+        self.pl = pl
+        self.marker_mesh = pyvista.Disc(center=[0,0,0], inner=0.1, outer=0.2)
+        self.actor = self.pl.add_mesh(self.marker_mesh, color='red', ambient=0.3, diffuse=0.5, smooth_shading=True)
+
+    def update_target(self, pos):
+        trans = vtkTransform()
+        trans.Translate([pos[0], pos[1], 0.01])
+        self.actor.SetUserTransform(trans)
+
+    def set_visibility(self, flag):
+        self.actor.SetVisibility(flag)
+
+
+class TargetReactionActor():
+
+    def __init__(self, pl):
+        self.pl = pl
+        # self.marker_mesh = pyvista.Sphere(center=[0,0,0], radius=0.05)
+        # self.actor = self.pl.add_mesh(self.marker_mesh, color='red', ambient=0.3, diffuse=0.5, smooth_shading=True)
+
+        self.outer_mesh = pyvista.Sphere(center=[0,0,0], radius=0.2)
+        self.actor_outer = self.pl.add_mesh(self.outer_mesh, color='orange', ambient=0.3, diffuse=0.5, smooth_shading=True, opacity=0.5)
+        self.inner_mesh = pyvista.Sphere(center=[0,0,0], radius=0.2)
+        self.actor_inner = self.pl.add_mesh(self.inner_mesh, color='red', ambient=0.3, diffuse=0.5, smooth_shading=True)
+
+    def update_target(self, pos, time=None):
+        # trans = vtkTransform()
+        # trans.Translate([pos[0], pos[1], pos[2]])
+        # self.actor.SetUserTransform(trans)
+
+        trans = vtkTransform()
+        trans.Translate([pos[0], pos[1], pos[2]])
+        self.actor_outer.SetUserTransform(trans)
+        trans = vtkTransform()
+        trans.Translate([pos[0], pos[1], pos[2]])
+        trans.Scale([time, time, time])
+        self.actor_inner.SetUserTransform(trans)
+
+    def set_visibility(self, flag):
+        # self.actor.SetVisibility(flag)
+
+        self.actor_inner.SetVisibility(flag)
+        self.actor_outer.SetVisibility(flag)
+
+
+class BallActor():
+
+    def __init__(self, pl, sport='tennis', num_exposure=30, motion_blur=True):
+        self.pl = pl
+        self.sport = sport
+        self.motion_blur = motion_blur
+        self.num_exposure = num_exposure
+        if sport == 'tennis':
+            if self.motion_blur:
+                self.actors = []
+                for i in range(self.num_exposure):
+                    ball_mesh = pyvista.Sphere(center=[0,0,0], radius=0.05)
+                    self.actors += [self.pl.add_mesh(ball_mesh, color='yellow', 
+                        ambient=0.3, diffuse=0.8, smooth_shading=True, opacity=5./num_exposure)]
+            else:
+                self.ball_mesh = pyvista.Sphere(center=[0,0,0], radius=0.032)
+                self.actor = self.pl.add_mesh(self.ball_mesh, color='yellow', 
+                    ambient=0.3, diffuse=1, smooth_shading=True)
+        else:
+            NotImplemented
+
+    def update_ball(self, params):
+        if self.motion_blur:
+            for i in range(self.num_exposure):
+                trans = vtkTransform()
+                pos = params['pos_blur'][i]
+                trans.Translate([pos[0], pos[1], pos[2]])
+                self.actors[i].SetUserTransform(trans)
+        else:
+            trans = vtkTransform()
+            pos = params['pos']
+            trans.Translate([pos[0], pos[1], pos[2]])
+            self.actor.SetUserTransform(trans)
+
+    def set_visibility(self, flag):
+        if self.motion_blur:
+            for actor in self.actors:
+                actor.SetVisibility(flag)
+        else:
+            self.actor.SetVisibility(flag)
+
+
 class SportVisualizer(PyvistaVisualizer):
 
     def __init__(self, show_smpl=False, show_skeleton=True, show_racket=False, 
+        show_target=False, show_ball=False, show_stats=True,
         correct_root_height=False, device=torch.device('cpu'), **kwargs):
         
         super().__init__(**kwargs)
         self.show_smpl = show_smpl
         self.show_skeleton = show_skeleton
         self.show_racket = show_racket
+        self.show_target = show_target
+        self.show_ball = show_ball
+        self.show_stats = show_stats
         self.correct_root_height = correct_root_height
         self.smpl = SMPL(SMPL_MODEL_DIR, create_transl=False).to(device)
         faces = self.smpl.faces.copy()       
         self.smpl_faces = faces = np.hstack([np.ones_like(faces[:, [0]]) * 3, faces])
         self.smpl_joint_parents = self.smpl.parents.cpu().numpy()
+        self.smpl_verts = None
+        self.smpl_joints = None
+        self.racket_params = None
         self.device = device
         
     def update_smpl_seq(self, smpl_seq=None, racket_seq=None):
@@ -228,6 +326,13 @@ class SportVisualizer(PyvistaVisualizer):
             if trans is not None:
                 joints_world = joints_world + trans.unsqueeze(-2)
             self.smpl_joints = joints_world
+
+        if self.correct_root_height:
+            diff_root_height = torch.min(self.smpl_joints[:, :, 10:12, 2], dim=2)[0].view(*trans.shape[:2], 1)
+            self.smpl_joints[:, :, :, 2] -= diff_root_height
+            if self.smpl_verts is not None:
+                self.smpl_verts[:, :, :, 2] -= diff_root_height
+            trans[:, :, 2:] -= diff_root_height
         
         if racket_seq is not None:
             num_actors, num_frames = trans.shape[:2]
@@ -236,12 +341,6 @@ class SportVisualizer(PyvistaVisualizer):
                     if racket_seq[i][j] is not None:
                         racket_seq[i][j]['root'] = trans[i, j].numpy()
             self.racket_params = racket_seq
-
-        if self.correct_root_height:
-            diff_root_height = torch.min(self.smpl_joints[:, :, 10:12, 2], dim=2)[0].view(*trans.shape[:2], 1)
-            self.smpl_joints[:, :, :, 2] -= diff_root_height
-            if self.smpl_verts is not None:
-                self.smpl_verts[:, :, :, 2] -= diff_root_height
 
         self.fr = 0
         self.num_fr = self.smpl_joints.shape[1]
@@ -379,7 +478,6 @@ class SportVisualizer(PyvistaVisualizer):
             tex = pyvista.numpy_to_texture(make_checker_board_texture('#FFFFFF', '#AAAAAA', width=10))
             self.pl.add_mesh(net_mesh, texture=tex, ambient=0.2, diffuse=0.8, opacity=0.1, smooth_shading=True)
             
-
         # floor
         wlh = (20, 40, 0.05)
         center = np.array([0, 0, -wlh[2] * 0.5])
@@ -387,16 +485,28 @@ class SportVisualizer(PyvistaVisualizer):
         floor_mesh.points[:, 2] -= 0.01
         self.pl.add_mesh(floor_mesh, color='#769771', ambient=0.2, diffuse=0.8, specular=0.8, specular_power=5, smooth_shading=True)
 
-        self.update_smpl_seq(init_args.get('smpl_seq', None), init_args.get('racket_seq', None))
-        self.num_actors = init_args.get('num_actors', self.smpl_joints.shape[0])
+        smpl_seq, racket_seq = init_args.get('smpl_seq'), init_args.get('racket_seq')
+        if smpl_seq is not None:
+            self.update_smpl_seq(smpl_seq, racket_seq)
+        self.num_actors = init_args['num_actors']
 
         colors = get_color_palette(self.num_actors, colormap='autumn' if self.show_skeleton and not self.show_smpl else 'rainbow')
-        if self.show_smpl and self.smpl_verts is not None:
+        if self.show_smpl:
             if self.num_actors <= 2:
                 colors = ['#ffca3a'] * self.num_actors
             else:
                 colors = get_color_palette(self.num_actors, 'rainbow')
-            vertices = self.smpl_verts[0, 0].cpu().numpy()
+            # vertices = self.smpl_verts[0, 0].cpu().numpy()
+            # HACK: get vertices from fake smpl joint
+            smpl_motion = self.smpl(
+                global_orient=torch.zeros((1, 3)).float(),
+                body_pose=torch.zeros((1, 69)).float(),
+                betas=torch.zeros((1, 10)).float(),
+                root_trans = torch.zeros((1, 3)).float(),
+                return_full_pose=True,
+                orig_joints=True
+            )
+            vertices = smpl_motion.vertices.reshape(-1, 3).numpy()
             if init_args.get('debug_root'):
                 # Odd actors are final result, even actors are old result
                 self.smpl_actors = [SMPLActor(self.pl, vertices, self.smpl_faces, color='#d00000' if i%2==0 else '#ffca3a') 
@@ -414,6 +524,19 @@ class SportVisualizer(PyvistaVisualizer):
         if self.show_racket:
             self.racket_actors = [RacketActor(self.pl, init_args.get('sport')) 
                 for _ in range(self.num_actors)]
+        
+        if self.show_target:
+            self.tar_reaction_actors = [TargetReactionActor(self.pl) for _ in range(self.num_actors)] 
+            self.tar_recover_actors = [TargetRecoveryActor(self.pl) for _ in range(self.num_actors)]
+        
+        if self.show_ball:
+            self.ball_actors = [BallActor(self.pl, init_args.get('sport')) for _ in range(self.num_actors)] 
+
+        if self.show_stats: 
+            self.text_actor_tar = self.pl.add_text('', position=(30, 1000), color='black')
+            self.text_actor_phase = self.pl.add_text('', position=(30, 950), color='black')
+            self.text_actor_reward = self.pl.add_text('', position=(30, 900), color='black')
+      
         
     def update_camera(self, interactive):
         pass
@@ -439,7 +562,7 @@ class SportVisualizer(PyvistaVisualizer):
                     actor.set_visibility(True)
                     actor.set_opacity(0.5)
 
-        if self.show_skeleton:
+        if self.show_skeleton and self.smpl_joints is not None:
             for i, actor in enumerate(self.skeleton_actors):
                 if self.smpl_joints[i, self.fr].sum() == 0:
                     actor.set_visibility(False)
@@ -448,7 +571,7 @@ class SportVisualizer(PyvistaVisualizer):
                     actor.set_visibility(True)
                     actor.set_opacity(1.0)
         
-        if self.show_racket:
+        if self.show_racket and self.racket_params is not None:
             for i, actor in enumerate(self.racket_actors):
                 if self.smpl_joints[i, self.fr].sum() == 0:
                     actor.set_visibility(False)
@@ -467,3 +590,77 @@ class SportVisualizer(PyvistaVisualizer):
 
         self.pl.add_key_event('z', next_data)
         self.pl.add_key_event('t', reset_camera)
+    
+    def show_animation_online(self, window_size=(800, 800), init_args=None, enable_shadow=None, 
+            show_axes=True, off_screen=False):
+        if off_screen:
+            if platform.system() == 'Linux':
+                pyvista.start_xvfb()
+        if enable_shadow is not None:
+            self.enable_shadow = enable_shadow
+        self.pl = pyvista.Plotter(window_size=window_size, off_screen=off_screen)
+        self.init_camera(init_args)
+        self.init_scene(init_args)
+        self.setup_key_callback()
+        if show_axes:
+            self.pl.show_axes()
+        self.pl.show(interactive_update=True)
+        self.render(interactive=not off_screen)
+    
+    def update_scene_online(self, joint_pos=None, smpl_verts=None, racket_params=None, ball_params=None,
+        tar_pos=None, tar_action=None, tar_time=None, stats=None):
+
+        if self.show_smpl and smpl_verts is not None:
+            for i, actor in enumerate(self.smpl_actors):
+                actor.update_verts(smpl_verts[i].cpu().numpy())
+                actor.set_visibility(True)
+                actor.set_opacity(0.5)
+
+        if self.show_skeleton and joint_pos is not None:
+            for i, actor in enumerate(self.skeleton_actors):
+                actor.update_joints(joint_pos[i].cpu().numpy())
+                actor.set_visibility(True)
+                actor.set_opacity(1.0)
+        
+        if self.show_racket and racket_params is not None:
+            for i, actor in enumerate(self.racket_actors):
+                actor.update_racket(racket_params[i])
+                actor.set_visibility(True)
+        
+        if self.show_target and tar_pos is not None:
+            for i in range(self.num_actors):
+                rea_actor = self.tar_reaction_actors[i]
+                rec_actor = self.tar_recover_actors[i]
+                if tar_action is None:
+                    rec_actor.update_target(tar_pos[i].cpu().numpy())
+                    rec_actor.set_visibility(True)
+                    rea_actor.set_visibility(False)
+                else: 
+                    if tar_action[i] == 0:
+                        rec_actor.set_visibility(False)
+                        # rec_actor.update_target(tar_pos[i].cpu().numpy())
+                        # rec_actor.set_visibility(True)
+                        # rea_actor.set_visibility(False)
+                    else:
+                        rea_actor.update_target(tar_pos[i].cpu().numpy(), tar_time[i].cpu().numpy())
+                        rea_actor.set_visibility(True)
+                        rec_actor.set_visibility(False)
+        
+        if self.show_ball and ball_params is not None:
+            for i, actor in enumerate(self.ball_actors):
+                actor.update_ball(ball_params[i])
+                actor.set_visibility(True)
+            
+        if self.show_stats and stats is not None:
+            self.text_actor_phase.SetInput('Phase: {:.2f}'.format(stats['phase'].cpu().numpy()))
+            self.text_actor_tar.SetInput('Target: time, pos, action - {:02d} {} {}'.format(
+                stats['tar_time'].cpu().numpy(),
+                np.array2string(stats['tar_pos'].cpu().numpy(), formatter={'all': lambda x: '%.2f' % x}, separator=','),
+                # (len(theList) * '{:3f} ').format(stats['tar_pos'].cpu().numpy().tolist()),
+                # ["%.1f" % i for i in stats['tar_pos'].cpu().numpy().tolist()],
+                stats['tar_action'].cpu().numpy()
+            ))
+            self.text_actor_reward.SetInput('Reward: {} - {}'.format(
+                stats['sub_reward_names'].replace('_reward', ''),
+                np.array2string(stats['sub_rewards'].cpu().numpy(), formatter={'all': lambda x: '%.4f' % x}, separator=','),
+            ))

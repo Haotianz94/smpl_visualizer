@@ -180,6 +180,8 @@ class PyvistaVisualizer:
                     elif self.repeat:
                         self.fr = 0
                         self.update_scene()
+                    else:
+                        return 
                 elif self.reverse and self.fr > 0:
                     self.fr -= 1
                     self.update_scene()
@@ -193,7 +195,7 @@ class PyvistaVisualizer:
         if enable_shadow is not None:
             self.enable_shadow = enable_shadow
         self.pl = pyvista.Plotter(window_size=window_size)
-        self.init_camera()
+        self.init_camera(init_args)
         self.init_scene(init_args)
         self.update_scene()
         self.setup_key_callback()
@@ -204,6 +206,7 @@ class PyvistaVisualizer:
             self.fps_animation_loop()
         else:
             self.tframe_animation_loop()
+        self.pl.close()
 
     def save_frame(self, fr, img_path):
         self.fr = fr
