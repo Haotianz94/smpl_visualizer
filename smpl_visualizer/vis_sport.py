@@ -270,7 +270,7 @@ class BallActor():
 class SportVisualizer(PyvistaVisualizer):
 
     def __init__(self, show_smpl=False, show_skeleton=True, show_racket=False, 
-        show_target=False, show_ball=False, show_stats=True,
+        show_target=False, show_ball=False, show_stats=True, track_first_actor=True,
         correct_root_height=False, device=torch.device('cpu'), **kwargs):
         
         super().__init__(**kwargs)
@@ -280,7 +280,10 @@ class SportVisualizer(PyvistaVisualizer):
         self.show_target = show_target
         self.show_ball = show_ball
         self.show_stats = show_stats
+        self.track_first_actor = track_first_actor
         self.correct_root_height = correct_root_height
+        self.camera = None
+
         self.smpl = SMPL(SMPL_MODEL_DIR, create_transl=False).to(device)
         faces = self.smpl.faces.copy()       
         self.smpl_faces = faces = np.hstack([np.ones_like(faces[:, [0]]) * 3, faces])
@@ -347,6 +350,7 @@ class SportVisualizer(PyvistaVisualizer):
 
     def init_camera(self, init_args):
         super().init_camera()
+        self.camera = init_args.get('camera')
 
         if init_args.get('sport') == 'tennis':
             if init_args.get('camera') == 'front':
@@ -390,7 +394,7 @@ class SportVisualizer(PyvistaVisualizer):
                 self.pl.camera.focal_point = [0, 3.5, 0]
                 # self.pl.camera.position = [15, 3.5, 3]
                 self.pl.camera.position = [15, 3.5, 0]
-
+        
     def init_scene(self, init_args):
         if init_args is None:
             init_args = dict()
@@ -550,6 +554,13 @@ class SportVisualizer(PyvistaVisualizer):
         # self.pl.camera.position = new_pos.tolist()
         # self.pl.camera.roll = roll   # don't set roll
 
+        if self.track_first_actor and self.camera == 'front':
+            root_pos = self.smpl_joints[0, self.fr, 0].cpu().numpy()
+            new_pos = [root_pos[0] / 2, -25, 3]
+            self.pl.camera.up = (0, 0, 1)
+            self.pl.camera.focal_point = [0, 0, 0]
+            self.pl.camera.position = new_pos
+
     def update_scene(self):
         super().update_scene()
 
@@ -605,7 +616,7 @@ class SportVisualizer(PyvistaVisualizer):
         if show_axes:
             self.pl.show_axes()
         self.pl.show(interactive_update=True)
-        self.render(interactive=not off_screen)
+        # self.render(interactive=not off_screen)
     
     def update_scene_online(self, joint_pos=None, smpl_verts=None, racket_params=None, ball_params=None,
         tar_pos=None, tar_action=None, tar_time=None, stats=None):
@@ -636,15 +647,10 @@ class SportVisualizer(PyvistaVisualizer):
                     rec_actor.set_visibility(True)
                     rea_actor.set_visibility(False)
                 else: 
-                    if tar_action[i] == 0:
-                        rec_actor.set_visibility(False)
-                        # rec_actor.update_target(tar_pos[i].cpu().numpy())
-                        # rec_actor.set_visibility(True)
-                        # rea_actor.set_visibility(False)
-                    else:
+                    rec_actor.set_visibility(False)
+                    if tar_action[i] == 1:
                         rea_actor.update_target(tar_pos[i].cpu().numpy(), tar_time[i].cpu().numpy())
                         rea_actor.set_visibility(True)
-                        rec_actor.set_visibility(False)
         
         if self.show_ball and ball_params is not None:
             for i, actor in enumerate(self.ball_actors):
@@ -656,11 +662,18 @@ class SportVisualizer(PyvistaVisualizer):
             self.text_actor_tar.SetInput('Target: time, pos, action - {:02d} {} {}'.format(
                 stats['tar_time'].cpu().numpy(),
                 np.array2string(stats['tar_pos'].cpu().numpy(), formatter={'all': lambda x: '%.2f' % x}, separator=','),
-                # (len(theList) * '{:3f} ').format(stats['tar_pos'].cpu().numpy().tolist()),
-                # ["%.1f" % i for i in stats['tar_pos'].cpu().numpy().tolist()],
                 stats['tar_action'].cpu().numpy()
             ))
             self.text_actor_reward.SetInput('Reward: {} - {}'.format(
                 stats['sub_reward_names'].replace('_reward', ''),
                 np.array2string(stats['sub_rewards'].cpu().numpy(), formatter={'all': lambda x: '%.4f' % x}, separator=','),
             ))
+        
+        self.smpl_joints = joint_pos.unsqueeze(-1)
+        self.fr = 0
+        # if self.track_first_actor:
+        #     root_pos = joint_pos[0, 0].cpu().numpy()
+        #     new_pos = [root_pos[0] / 2, -25, 3]
+        #     self.pl.camera.up = (0, 0, 1)
+        #     self.pl.camera.focal_point = [0, 0, 0]
+        #     self.pl.camera.position = new_pos

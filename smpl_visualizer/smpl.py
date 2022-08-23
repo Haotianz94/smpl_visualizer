@@ -5,8 +5,8 @@ import torch
 import numpy as np
 from collections import namedtuple
 from smplx import SMPL as _SMPL
-from smplx.lbs import vertices2joints, blend_shapes, batch_rigid_transform, batch_rodrigues
-
+from smplx.lbs import vertices2joints, blend_shapes, batch_rigid_transform, batch_rodrigues, transform_mat
+import pdb
 
 ModelOutput = namedtuple('ModelOutput',
                          ['vertices',
@@ -363,18 +363,14 @@ class SMPL(_SMPL):
         # ones from the module
 
         """ LBS """
-        pdb.set_trace()
-
         batch_size = pose.shape[0]
         rot_mats = pose.view(batch_size, -1, 3, 3)
-        joints = self.joint_pos_bind[:batch_size, ...].unsqueeze(-1)
 
-        rel_joints = joints.clone()
-        rel_joints[:, 1:] -= joints[:, self.parents[1:]]
+        rel_joints = self.joint_pos_bind_rel[:batch_size]
 
         transforms_mat = transform_mat(
             rot_mats.reshape(-1, 3, 3),
-            rel_joints.reshape(-1, 3, 1)).reshape(-1, joints.shape[1], 4, 4)
+            rel_joints.reshape(-1, 3, 1)).reshape(-1, rel_joints.shape[1], 4, 4)
 
         transform_chain = [transforms_mat[:, 0]]
         for i in range(1, self.parents.shape[0]):
