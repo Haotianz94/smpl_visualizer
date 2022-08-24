@@ -5,7 +5,8 @@ import torch
 import numpy as np
 from collections import namedtuple
 from smplx import SMPL as _SMPL
-from smplx.lbs import vertices2joints, blend_shapes, batch_rigid_transform, batch_rodrigues, transform_mat
+import os
+from smplx.lbs import vertices2joints, batch_rigid_transform, batch_rodrigues, transform_mat
 import pdb
 
 ModelOutput = namedtuple('ModelOutput',
@@ -25,11 +26,11 @@ H36M_TO_J14 = H36M_TO_J17[:14]
 H36M_TO_J15 = [H36M_TO_J17[14]] + H36M_TO_J17[:14]
 H36M_TO_J16 = H36M_TO_J17[14:16] + H36M_TO_J17[:14]
 
-BASE_DIR = '/home/haotian/Projects/smpl_visualizer/'
-JOINT_REGRESSOR_TRAIN_EXTRA = BASE_DIR + 'data/J_regressor_extra.npy'
-JOINT_REGRESSOR_H36M = BASE_DIR + 'data/J_regressor_h36m.npy'
-SMPL_MEAN_PARAMS = BASE_DIR + 'data/smpl_mean_params.npz'
-SMPL_MODEL_DIR = BASE_DIR + 'data/body_models/smpl/basicmodel_f_lbs_10_207_0_v1.1.0.pkl'
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+JOINT_REGRESSOR_TRAIN_EXTRA = os.path.join(BASE_DIR, 'data/J_regressor_extra.npy')
+JOINT_REGRESSOR_H36M = os.path.join(BASE_DIR, 'data/J_regressor_h36m.npy')
+SMPL_MEAN_PARAMS = os.path.join(BASE_DIR, 'data/smpl_mean_params.npz')
+SMPL_MODEL_DIR = os.path.join(BASE_DIR, 'data/body_models/smpl/basicmodel_f_lbs_10_207_0_v1.1.0.pkl')
 
 
 # Map joints to SMPL joints
