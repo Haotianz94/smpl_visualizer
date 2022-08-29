@@ -297,7 +297,9 @@ class SMPL(_SMPL):
         joint_pos_bind_rel[1:] -= joint_pos_bind[self.parents[1:]]
         joint_pos_bind_rel[0] = 0
         if 'batch_size' in kwargs.keys():
+            joint_pos_bind = joint_pos_bind.repeat((kwargs['batch_size'], 1, 1))
             joint_pos_bind_rel = joint_pos_bind_rel.repeat((kwargs['batch_size'], 1, 1))
+        self.joint_pos_bind = joint_pos_bind
         self.joint_pos_bind_rel = joint_pos_bind_rel
 
     def forward(self, *args, root_trans=None, root_scale=None, orig_joints=False, **kwargs):

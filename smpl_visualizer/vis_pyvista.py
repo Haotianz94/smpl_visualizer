@@ -37,11 +37,12 @@ class PyvistaVisualizer:
         self.azimuth = azimuth
     
     def init_camera(self):
+        pass
         # self.pl.camera_position = 'yz'
-        self.pl.camera.focal_point = (0, 0, 0)
-        self.pl.camera.position = (self.distance, 0, 0)
-        self.pl.camera.elevation = self.elevation
-        self.pl.camera.azimuth = self.azimuth
+        # self.pl.camera.focal_point = (0, 0, 0)
+        # self.pl.camera.position = (self.distance, 0, 0)
+        # self.pl.camera.elevation = self.elevation
+        # self.pl.camera.azimuth = self.azimuth
         # self.pl.camera.zoom(1.0)
 
     def set_camera_instrinsics(self, fx=None, fy=None, cx=None, cy=None, z_near=0.1, zfar=1000):

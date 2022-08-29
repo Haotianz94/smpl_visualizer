@@ -282,7 +282,8 @@ class SportVisualizer(PyvistaVisualizer):
         self.show_stats = show_stats
         self.track_first_actor = track_first_actor
         self.correct_root_height = correct_root_height
-        self.camera = None
+        self.camera = 'front'
+        self.sport = 'tennis'
 
         self.smpl = SMPL(SMPL_MODEL_DIR, create_transl=False).to(device)
         faces = self.smpl.faces.copy()       
@@ -293,7 +294,7 @@ class SportVisualizer(PyvistaVisualizer):
         self.racket_params = None
         self.device = device
         
-    def update_smpl_seq(self, smpl_seq=None, racket_seq=None):
+    def setup_animation(self, smpl_seq=None, racket_seq=None, ball_seq=None):
         self.smpl_seq = smpl_seq
         self.smpl_verts = None
 
@@ -344,51 +345,61 @@ class SportVisualizer(PyvistaVisualizer):
                     if racket_seq[i][j] is not None:
                         racket_seq[i][j]['root'] = trans[i, j].numpy()
             self.racket_params = racket_seq
+        
+        self.ball_params = ball_seq
 
         self.fr = 0
         self.num_fr = self.smpl_joints.shape[1]
-
+    
     def init_camera(self, init_args):
-        super().init_camera()
-        self.camera = init_args.get('camera')
+        self.camera = init_args.get('camera', self.camera)
+        self.sport = init_args.get('sport', self.sport)
 
-        if init_args.get('sport') == 'tennis':
-            if init_args.get('camera') == 'front':
+        if self.sport == 'tennis':
+            if self.camera == 'front':
                 self.pl.camera.up = (0, 0, 1)
                 self.pl.camera.focal_point = [0, 0, 0]
                 self.pl.camera.position = [0, -25, 3]
-            elif init_args.get('camera') == 'side_both':
+            elif self.camera == 'back':
                 self.pl.camera.up = (0, 0, 1)
                 self.pl.camera.focal_point = [0, 0, 0]
-                self.pl.camera.position = [15, 0, 3]
-            elif init_args.get('camera') == 'side_near':
+                self.pl.camera.position = [0, 25, 3]
+            elif self.camera == 'top':
+                self.pl.camera.up = (-1, 0, 0)
+                self.pl.camera.focal_point = [0, 0, 0]
+                self.pl.camera.position = [0, 0, 35]
+            elif self.camera == 'side_both':
+                self.pl.camera.up = (0, 0, 1)
+                self.pl.camera.focal_point = [0, 0, 0]
+                self.pl.camera.position = [35, 0, 3]
+            elif self.camera == 'side_near':
                 self.pl.camera.elevation = 0
                 self.pl.camera.up = (0, 0, 1)
                 self.pl.camera.focal_point = [0, -12, 0]
                 # self.pl.camera.position = [15, -12, 3]
                 self.pl.camera.position = [15, -12, 0]
-            elif init_args.get('camera') == 'side_far':
+            elif self.camera == 'side_far':
                 self.pl.camera.elevation = 0
                 self.pl.camera.up = (0, 0, 1)
                 self.pl.camera.focal_point = [0, 12, 0]
                 # self.pl.camera.position = [15, 12, 3]
                 self.pl.camera.position = [15, 12, 0]
-        elif init_args.get('sport') == 'badminton':
-            if init_args.get('camera') == 'front':
+        elif self.sport == 'badminton':
+            if self.camera == 'front':
                 self.pl.camera.up = (0, 0, 1)
                 self.pl.camera.focal_point = [0, 0, 0]
                 self.pl.camera.position = [0, -13, 3]
-            elif init_args.get('camera') == 'side_both':
+            elif self.camera == 'side_both':
                 self.pl.camera.up = (0, 0, 1)
                 self.pl.camera.focal_point = [0, 0, 0]
                 self.pl.camera.position = [15, 0, 3]
-            elif init_args.get('camera') == 'side_near':
+            elif self.camera == 'side_near':
                 self.pl.camera.elevation = 0
                 self.pl.camera.up = (0, 0, 1)
                 self.pl.camera.focal_point = [0, -3.5, 0]
                 # self.pl.camera.position = [15, -3.5, 3]
                 self.pl.camera.position = [15, -3.5, 0]
-            elif init_args.get('camera') == 'side_far':
+            elif self.camera == 'side_far':
                 self.pl.camera.elevation = 0
                 self.pl.camera.up = (0, 0, 1)
                 self.pl.camera.focal_point = [0, 3.5, 0]
@@ -399,6 +410,7 @@ class SportVisualizer(PyvistaVisualizer):
         if init_args is None:
             init_args = dict()
         super().init_scene(init_args)
+
         # Init tennis court
         if init_args.get('sport') == 'tennis':
             # Court
@@ -413,7 +425,7 @@ class SportVisualizer(PyvistaVisualizer):
                 center = np.array([x, 0, -wlh[2] * 0.5])
                 court_line_mesh = pyvista.Cube(center, *wlh)
                 court_line_mesh.points[:, 2] += 0.01
-                self.pl.add_mesh(court_line_mesh, color='#FFFFFF', ambient=0.2, diffuse=0.8, specular=0.8, specular_power=5, smooth_shading=True)
+                self.pl.add_mesh(court_line_mesh, color='#FFFFFF', ambient=0.8, diffuse=0.2, specular=0, smooth_shading=True)
             
             # Court lines (horizontal)
             for y, w in zip([-11.89, -6.4, 0, 6.4, 11.89], [10.97, 8.23, 10.97, 8.23, 10.97]):
@@ -421,14 +433,14 @@ class SportVisualizer(PyvistaVisualizer):
                 center = np.array([0, y, -wlh[2] * 0.5])
                 court_line_mesh = pyvista.Cube(center, *wlh)
                 court_line_mesh.points[:, 2] += 0.01
-                self.pl.add_mesh(court_line_mesh, color='#FFFFFF', ambient=0.2, diffuse=0.8, specular=0.8, specular_power=5, smooth_shading=True)
+                self.pl.add_mesh(court_line_mesh, color='#FFFFFF', ambient=0.8, diffuse=0.2, specular=0, smooth_shading=True)
             
             # Post
             for x in [-0.91-10.97/2, 0.91+10.97/2]:
                 wlh = (0.05, 0.05, 1.2)
                 center = np.array([x, 0, wlh[2] * 0.5])
                 post_mesh = pyvista.Cube(center, *wlh)
-                self.pl.add_mesh(post_mesh, color='#BD7427', ambient=0.2, diffuse=0.8, specular=0.8, specular_power=5, smooth_shading=True)
+                self.pl.add_mesh(post_mesh, color='#BD7427', ambient=0.8, diffuse=0.2, specular=0, smooth_shading=True)
             
             # Net
             wlh = (10.97+0.91*2, 0.01, 1.07)
@@ -451,13 +463,13 @@ class SportVisualizer(PyvistaVisualizer):
                 center = np.array([x, 0, -wlh[2] * 0.5])
                 court_line_mesh = pyvista.Cube(center, *wlh)
                 court_line_mesh.points[:, 2] += 0.01
-                self.pl.add_mesh(court_line_mesh, color='#FFFFFF', ambient=0.2, diffuse=0.8, specular=0.8, specular_power=5, smooth_shading=True)
+                self.pl.add_mesh(court_line_mesh, color='#FFFFFF', ambient=0.8, diffuse=0.2, specular=0, smooth_shading=True)
             for x, y, l in zip([0, 0], [-(1.98+6.71)/2, (1.98+6.71)/2], [3.96+0.76, 3.96+0.76]):
                 wlh = (0.05, l, 0.05)
                 center = np.array([x, y, -wlh[2] * 0.5])
                 court_line_mesh = pyvista.Cube(center, *wlh)
                 court_line_mesh.points[:, 2] += 0.01
-                self.pl.add_mesh(court_line_mesh, color='#FFFFFF', ambient=0.2, diffuse=0.8, specular=0.8, specular_power=5, smooth_shading=True)
+                self.pl.add_mesh(court_line_mesh, color='#FFFFFF', ambient=0.8, diffuse=0.2, specular=0, smooth_shading=True)
             
             # Court lines (horizontal)
             for y in [-6.71, -3.96-1.98, -1.98, 1.98, 1.98+3.96, 6.71]:
@@ -465,7 +477,7 @@ class SportVisualizer(PyvistaVisualizer):
                 center = np.array([0, y, -wlh[2] * 0.5])
                 court_line_mesh = pyvista.Cube(center, *wlh)
                 court_line_mesh.points[:, 2] += 0.01
-                self.pl.add_mesh(court_line_mesh, color='#FFFFFF', ambient=0.2, diffuse=0.8, specular=0.8, specular_power=5, smooth_shading=True)
+                self.pl.add_mesh(court_line_mesh, color='#FFFFFF', ambient=0.8, diffuse=0.2, specular=0, smooth_shading=True)
 
             # Post
             for x in [-3.05, 3.05]:
@@ -489,9 +501,9 @@ class SportVisualizer(PyvistaVisualizer):
         floor_mesh.points[:, 2] -= 0.01
         self.pl.add_mesh(floor_mesh, color='#769771', ambient=0.2, diffuse=0.8, specular=0.8, specular_power=5, smooth_shading=True)
 
-        smpl_seq, racket_seq = init_args.get('smpl_seq'), init_args.get('racket_seq')
+        smpl_seq, racket_seq, ball_seq = init_args.get('smpl_seq'), init_args.get('racket_seq'), init_args.get('ball_seq')
         if smpl_seq is not None:
-            self.update_smpl_seq(smpl_seq, racket_seq)
+            self.setup_animation(smpl_seq, racket_seq, ball_seq)
         self.num_actors = init_args['num_actors']
 
         colors = get_color_palette(self.num_actors, colormap='autumn' if self.show_skeleton and not self.show_smpl else 'rainbow')
@@ -541,7 +553,6 @@ class SportVisualizer(PyvistaVisualizer):
             self.text_actor_phase = self.pl.add_text('', position=(30, 950), color='black')
             self.text_actor_reward = self.pl.add_text('', position=(30, 900), color='black')
       
-        
     def update_camera(self, interactive):
         pass
         # root_pos = self.smpl_joints[0, self.fr, 0].cpu().numpy()
@@ -589,19 +600,53 @@ class SportVisualizer(PyvistaVisualizer):
                 else:
                     actor.update_racket(self.racket_params[i][self.fr])
                     actor.set_visibility(True)
+        
+        if self.show_ball and self.ball_params is not None:
+            for i, actor in enumerate(self.ball_actors):
+                if i >= len(self.ball_params): actor.set_visibility(False)
+                else:
+                    if self.ball_params[i][self.fr] is not None:
+                        actor.update_ball(self.ball_params[i][self.fr])
+                        actor.set_visibility(True)
+                    else:
+                        actor.set_visibility(False)
 
     def setup_key_callback(self):
         super().setup_key_callback()
 
-        def next_data():
-            self.update_smpl_seq()
+        def track_first_actor():
+            self.track_first_actor = not self.track_first_actor
+            if self.track_first_actor:
+                self.camera = 'front'
+        
+        # TODO: add sport arg
+        def reset_camera_front():
+            self.init_camera({'camera': 'front'})
+        
+        def reset_camera_back():
+            self.init_camera({'camera': 'back'})
+        
+        def reset_camera_side_near():
+            self.init_camera({'camera': 'side_near'})
+        
+        def reset_camera_side_far():
+            self.init_camera({'camera': 'side_far'})
+        
+        def reset_camera_side_both():
+            self.init_camera({'camera': 'side_both'})
 
-        def reset_camera():
-            self.init_camera()
+        def reset_camera_top():
+            self.init_camera({'camera': 'top'})
 
-        self.pl.add_key_event('z', next_data)
-        self.pl.add_key_event('t', reset_camera)
-    
+        self.pl.add_key_event('t', track_first_actor)
+
+        self.pl.add_key_event('1', reset_camera_front)
+        self.pl.add_key_event('2', reset_camera_back)
+        self.pl.add_key_event('3', reset_camera_side_near)
+        self.pl.add_key_event('4', reset_camera_side_far)
+        self.pl.add_key_event('5', reset_camera_side_both)
+        self.pl.add_key_event('6', reset_camera_top)
+
     def show_animation_online(self, window_size=(800, 800), init_args=None, enable_shadow=None, 
             show_axes=True, off_screen=False):
         if off_screen:
