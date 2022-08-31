@@ -227,50 +227,78 @@ class TargetReactionActor():
 
 class BallActor():
 
-    def __init__(self, pl, sport='tennis', num_exposure=30, motion_blur=True):
+    def __init__(self, pl, sport='tennis', color='yellow', num_exposure=30, real_shadow=False):
         self.pl = pl
         self.sport = sport
-        self.motion_blur = motion_blur
         self.num_exposure = num_exposure
+        self.real_shadow = real_shadow
         if sport == 'tennis':
-            if self.motion_blur:
-                self.actors = []
+            ball_mesh = pyvista.Sphere(center=[0,0,0], radius=0.032)
+            self.actor = self.pl.add_mesh(ball_mesh, color=color, 
+                ambient=0.3, diffuse=1, smooth_shading=True)
+
+            # For motion blur
+            self.actors = []
+            for i in range(self.num_exposure):
+                ball_mesh = pyvista.Sphere(center=[0,0,0], radius=0.05)
+                self.actors += [self.pl.add_mesh(ball_mesh, color=color, 
+                    ambient=0.3, diffuse=0.8, smooth_shading=True, 
+                    opacity=5./num_exposure if not real_shadow else 1)]
+            
+            if not self.real_shadow:
+                shadow_mesh = pyvista.Circle(radius=0.05)
+                self.shadow_actor = self.pl.add_mesh(shadow_mesh, color='gray', 
+                    diffuse=1, smooth_shading=True)
+                
+                self.shadow_actors = []
                 for i in range(self.num_exposure):
-                    ball_mesh = pyvista.Sphere(center=[0,0,0], radius=0.05)
-                    self.actors += [self.pl.add_mesh(ball_mesh, color='yellow', 
-                        ambient=0.3, diffuse=0.8, smooth_shading=True, opacity=5./num_exposure)]
-            else:
-                self.ball_mesh = pyvista.Sphere(center=[0,0,0], radius=0.032)
-                self.actor = self.pl.add_mesh(self.ball_mesh, color='yellow', 
-                    ambient=0.3, diffuse=1, smooth_shading=True)
+                    shadow_mesh = pyvista.Circle(radius=0.05)
+                    self.shadow_actors += [self.pl.add_mesh(shadow_mesh, color='gray', 
+                        diffuse=1, smooth_shading=True)]
         else:
             NotImplemented
 
     def update_ball(self, params):
-        if self.motion_blur:
+        if params.get('pos') is None:
+            self.set_visibility(False)
+            return
+        elif params.get('pos_blur') is not None:
             for i in range(self.num_exposure):
                 trans = vtkTransform()
                 pos = params['pos_blur'][i]
                 trans.Translate([pos[0], pos[1], pos[2]])
                 self.actors[i].SetUserTransform(trans)
+
+                if not self.real_shadow:
+                    trans = vtkTransform()
+                    trans.Translate([pos[0], pos[1], 0])
+                    self.shadow_actors[i].SetUserTransform(trans)
         else:
             trans = vtkTransform()
             pos = params['pos']
             trans.Translate([pos[0], pos[1], pos[2]])
             self.actor.SetUserTransform(trans)
 
+            if not self.real_shadow:
+                trans = vtkTransform()    
+                trans.Translate([pos[0], pos[1], 0])
+                self.shadow_actor.SetUserTransform(trans)
+
     def set_visibility(self, flag):
-        if self.motion_blur:
-            for actor in self.actors:
+        self.actor.SetVisibility(flag)
+        for actor in self.actors:
+            actor.SetVisibility(flag)
+        if not self.real_shadow:
+            self.shadow_actor.SetVisibility(flag)
+            for actor in self.shadow_actors:
                 actor.SetVisibility(flag)
-        else:
-            self.actor.SetVisibility(flag)
 
 
 class SportVisualizer(PyvistaVisualizer):
 
     def __init__(self, show_smpl=False, show_skeleton=True, show_racket=False, 
         show_target=False, show_ball=False, show_stats=True, track_first_actor=True,
+        enable_shadow=False,
         correct_root_height=False, device=torch.device('cpu'), **kwargs):
         
         super().__init__(**kwargs)
@@ -281,6 +309,7 @@ class SportVisualizer(PyvistaVisualizer):
         self.show_ball = show_ball
         self.show_stats = show_stats
         self.track_first_actor = track_first_actor
+        self.enable_shadow = enable_shadow
         self.correct_root_height = correct_root_height
         self.camera = 'front'
         self.sport = 'tennis'
@@ -359,11 +388,11 @@ class SportVisualizer(PyvistaVisualizer):
             if self.camera == 'front':
                 self.pl.camera.up = (0, 0, 1)
                 self.pl.camera.focal_point = [0, 0, 0]
-                self.pl.camera.position = [0, -25, 3]
+                self.pl.camera.position = [0, -25, 5]
             elif self.camera == 'back':
                 self.pl.camera.up = (0, 0, 1)
                 self.pl.camera.focal_point = [0, 0, 0]
-                self.pl.camera.position = [0, 25, 3]
+                self.pl.camera.position = [0, 25, 5]
             elif self.camera == 'top':
                 self.pl.camera.up = (-1, 0, 0)
                 self.pl.camera.focal_point = [0, 0, 0]
@@ -417,7 +446,7 @@ class SportVisualizer(PyvistaVisualizer):
             wlh = (10.97, 11.89*2, 0.05)
             center = np.array([0, 0, -wlh[2] * 0.5])
             court_mesh = pyvista.Cube(center, *wlh)
-            self.pl.add_mesh(court_mesh, color='#4A609D', ambient=0.2, diffuse=0.8, specular=0, smooth_shading=True)
+            self.pl.add_mesh(court_mesh, color='#4A609D', ambient=0.2, diffuse=0.8, specular=0.2, specular_power=5, smooth_shading=True)
 
             # Court lines (vertical)
             for x, l in zip([-10.97/2, -8.23/2, 0, 8.23/2, 10.97/2], [23.77, 23.77, 12.8, 23.77, 23.77]):
@@ -425,7 +454,7 @@ class SportVisualizer(PyvistaVisualizer):
                 center = np.array([x, 0, -wlh[2] * 0.5])
                 court_line_mesh = pyvista.Cube(center, *wlh)
                 court_line_mesh.points[:, 2] += 0.01
-                self.pl.add_mesh(court_line_mesh, color='#FFFFFF', ambient=0.8, diffuse=0.2, specular=0, smooth_shading=True)
+                self.pl.add_mesh(court_line_mesh, color='#FFFFFF', smooth_shading=True)
             
             # Court lines (horizontal)
             for y, w in zip([-11.89, -6.4, 0, 6.4, 11.89], [10.97, 8.23, 10.97, 8.23, 10.97]):
@@ -433,14 +462,14 @@ class SportVisualizer(PyvistaVisualizer):
                 center = np.array([0, y, -wlh[2] * 0.5])
                 court_line_mesh = pyvista.Cube(center, *wlh)
                 court_line_mesh.points[:, 2] += 0.01
-                self.pl.add_mesh(court_line_mesh, color='#FFFFFF', ambient=0.8, diffuse=0.2, specular=0, smooth_shading=True)
+                self.pl.add_mesh(court_line_mesh, color='#FFFFFF', smooth_shading=True)
             
             # Post
             for x in [-0.91-10.97/2, 0.91+10.97/2]:
                 wlh = (0.05, 0.05, 1.2)
                 center = np.array([x, 0, wlh[2] * 0.5])
                 post_mesh = pyvista.Cube(center, *wlh)
-                self.pl.add_mesh(post_mesh, color='#BD7427', ambient=0.8, diffuse=0.2, specular=0, smooth_shading=True)
+                self.pl.add_mesh(post_mesh, color='#BD7427', ambient=0.2, diffuse=0.8, specular=0.8, specular_power=5, smooth_shading=True)
             
             # Net
             wlh = (10.97+0.91*2, 0.01, 1.07)
@@ -450,12 +479,23 @@ class SportVisualizer(PyvistaVisualizer):
             tex = pyvista.numpy_to_texture(make_checker_board_texture('#FFFFFF', '#AAAAAA', width=10))
             self.pl.add_mesh(net_mesh, texture=tex, ambient=0.2, diffuse=0.8, opacity=0.1, smooth_shading=True)
 
+            # Lighting
+            if self.enable_shadow:
+                for x, y in [(-5, -5), (5, -5), (-5, 5), (5, 5)]:
+                    light = pyvista.Light(
+                        position=(x, y, 10),
+                        focal_point=(0, 0, 0),
+                        color=[1.0, 1.0, 1.0, 1.0],  # Color temp. 5400 K
+                        intensity=0.5,
+                    )
+                    self.pl.add_light(light)
+
         elif init_args.get('sport') == 'badminton':
             # Court
             wlh = (6.1, 13.41, 0.05)
             center = np.array([0, 0, -wlh[2] * 0.5])
             court_mesh = pyvista.Cube(center, *wlh)
-            self.pl.add_mesh(court_mesh, color='#4A609D', ambient=0.2, diffuse=0.8, specular=0, smooth_shading=True)
+            self.pl.add_mesh(court_mesh, color='#4A609D', ambient=0.2, diffuse=0.8, specular=0.2, specular_power=5, smooth_shading=True)
 
             # Court lines (vertical)
             for x in [-3.05, -2.6, 2.6, 3.05]:
@@ -463,13 +503,13 @@ class SportVisualizer(PyvistaVisualizer):
                 center = np.array([x, 0, -wlh[2] * 0.5])
                 court_line_mesh = pyvista.Cube(center, *wlh)
                 court_line_mesh.points[:, 2] += 0.01
-                self.pl.add_mesh(court_line_mesh, color='#FFFFFF', ambient=0.8, diffuse=0.2, specular=0, smooth_shading=True)
+                self.pl.add_mesh(court_line_mesh, color='#FFFFFF', smooth_shading=True)
             for x, y, l in zip([0, 0], [-(1.98+6.71)/2, (1.98+6.71)/2], [3.96+0.76, 3.96+0.76]):
                 wlh = (0.05, l, 0.05)
                 center = np.array([x, y, -wlh[2] * 0.5])
                 court_line_mesh = pyvista.Cube(center, *wlh)
                 court_line_mesh.points[:, 2] += 0.01
-                self.pl.add_mesh(court_line_mesh, color='#FFFFFF', ambient=0.8, diffuse=0.2, specular=0, smooth_shading=True)
+                self.pl.add_mesh(court_line_mesh, color='#FFFFFF', smooth_shading=True)
             
             # Court lines (horizontal)
             for y in [-6.71, -3.96-1.98, -1.98, 1.98, 1.98+3.96, 6.71]:
@@ -477,7 +517,7 @@ class SportVisualizer(PyvistaVisualizer):
                 center = np.array([0, y, -wlh[2] * 0.5])
                 court_line_mesh = pyvista.Cube(center, *wlh)
                 court_line_mesh.points[:, 2] += 0.01
-                self.pl.add_mesh(court_line_mesh, color='#FFFFFF', ambient=0.8, diffuse=0.2, specular=0, smooth_shading=True)
+                self.pl.add_mesh(court_line_mesh, color='#FFFFFF', smooth_shading=True)
 
             # Post
             for x in [-3.05, 3.05]:
@@ -499,19 +539,18 @@ class SportVisualizer(PyvistaVisualizer):
         center = np.array([0, 0, -wlh[2] * 0.5])
         floor_mesh = pyvista.Cube(center, *wlh)
         floor_mesh.points[:, 2] -= 0.01
-        self.pl.add_mesh(floor_mesh, color='#769771', ambient=0.2, diffuse=0.8, specular=0.8, specular_power=5, smooth_shading=True)
+        self.pl.add_mesh(floor_mesh, color='#769771', ambient=0.2, diffuse=0.8, specular=0.2, specular_power=5, smooth_shading=True)
 
         smpl_seq, racket_seq, ball_seq = init_args.get('smpl_seq'), init_args.get('racket_seq'), init_args.get('ball_seq')
         if smpl_seq is not None:
             self.setup_animation(smpl_seq, racket_seq, ball_seq)
         self.num_actors = init_args['num_actors']
 
-        colors = get_color_palette(self.num_actors, colormap='autumn' if self.show_skeleton and not self.show_smpl else 'rainbow')
         if self.show_smpl:
             if self.num_actors <= 2:
-                colors = ['#ffca3a'] * self.num_actors
+                colors_smpl = ['#ffca3a'] * self.num_actors
             else:
-                colors = get_color_palette(self.num_actors, 'rainbow')
+                colors_smpl = get_color_palette(self.num_actors, 'rainbow')
             # vertices = self.smpl_verts[0, 0].cpu().numpy()
             # HACK: get vertices from fake smpl joint
             smpl_motion = self.smpl(
@@ -528,13 +567,15 @@ class SportVisualizer(PyvistaVisualizer):
                 self.smpl_actors = [SMPLActor(self.pl, vertices, self.smpl_faces, color='#d00000' if i%2==0 else '#ffca3a') 
                     for i in range(self.num_actors)]
             else:
-                self.smpl_actors = [SMPLActor(self.pl, vertices, self.smpl_faces, color=colors[a]) for a in range(self.num_actors)]
+                self.smpl_actors = [SMPLActor(self.pl, vertices, self.smpl_faces, color=colors_smpl[a]) 
+                    for a in range(self.num_actors)]
+
         if self.show_skeleton:
             if not self.show_smpl:
-                colors = get_color_palette(self.num_actors, colormap='autumn')
+                colors_skeleton = get_color_palette(self.num_actors, colormap='autumn')
             else:
-                colors = ['yellow'] * self.num_actors
-            self.skeleton_actors = [SkeletonActor(self.pl, self.smpl_joint_parents, bone_color=colors[a]) 
+                colors_skeleton = ['yellow'] * self.num_actors
+            self.skeleton_actors = [SkeletonActor(self.pl, self.smpl_joint_parents, bone_color=colors_skeleton[a]) 
                 for a in range(self.num_actors)]
         
         if self.show_racket:
@@ -546,7 +587,13 @@ class SportVisualizer(PyvistaVisualizer):
             self.tar_recover_actors = [TargetRecoveryActor(self.pl) for _ in range(self.num_actors)]
         
         if self.show_ball:
-            self.ball_actors = [BallActor(self.pl, init_args.get('sport')) for _ in range(self.num_actors)] 
+            if self.num_actors <= 2:
+                self.ball_actors = [BallActor(self.pl, init_args.get('sport'), 
+                    real_shadow=self.enable_shadow) for _ in range(self.num_actors)] 
+            else:
+                self.ball_actors = [BallActor(self.pl, init_args.get('sport'), 
+                    color=colors_smpl[a], real_shadow=self.enable_shadow) 
+                    for a in range(self.num_actors)] 
 
         if self.show_stats: 
             self.text_actor_tar = self.pl.add_text('', position=(30, 1000), color='black')
@@ -567,7 +614,10 @@ class SportVisualizer(PyvistaVisualizer):
 
         if self.track_first_actor and self.camera == 'front':
             root_pos = self.smpl_joints[0, self.fr, 0].cpu().numpy()
-            new_pos = [root_pos[0] / 2, -25, 3]
+            if self.sport == 'tennis':
+                new_pos = [root_pos[0] / 2, -25, 5]
+            else:
+                new_pos = [root_pos[0] / 2, -13, 3]
             self.pl.camera.up = (0, 0, 1)
             self.pl.camera.focal_point = [0, 0, 0]
             self.pl.camera.position = new_pos
@@ -582,7 +632,10 @@ class SportVisualizer(PyvistaVisualizer):
                 else:
                     actor.update_verts(self.smpl_verts[i, self.fr].cpu().numpy())
                     actor.set_visibility(True)
-                    actor.set_opacity(0.5)
+                    if self.show_skeleton: 
+                        actor.set_opacity(0.8)
+                    else:
+                        actor.set_opacity(1.0)
 
         if self.show_skeleton and self.smpl_joints is not None:
             for i, actor in enumerate(self.skeleton_actors):
@@ -654,14 +707,16 @@ class SportVisualizer(PyvistaVisualizer):
                 pyvista.start_xvfb()
         if enable_shadow is not None:
             self.enable_shadow = enable_shadow
-        self.pl = pyvista.Plotter(window_size=window_size, off_screen=off_screen)
+        if self.enable_shadow:
+            self.pl = pyvista.Plotter(window_size=window_size, off_screen=off_screen, lighting='none')
+        else:
+            self.pl = pyvista.Plotter(window_size=window_size, off_screen=off_screen)
         self.init_camera(init_args)
         self.init_scene(init_args)
         self.setup_key_callback()
         if show_axes:
             self.pl.show_axes()
         self.pl.show(interactive_update=True)
-        # self.render(interactive=not off_screen)
     
     def update_scene_online(self, joint_pos=None, smpl_verts=None, racket_params=None, ball_params=None,
         tar_pos=None, tar_action=None, tar_time=None, stats=None):
@@ -670,7 +725,10 @@ class SportVisualizer(PyvistaVisualizer):
             for i, actor in enumerate(self.smpl_actors):
                 actor.update_verts(smpl_verts[i].cpu().numpy())
                 actor.set_visibility(True)
-                actor.set_opacity(0.5)
+                if self.show_skeleton: 
+                    actor.set_opacity(0.8)
+                else:
+                    actor.set_opacity(1.0)
 
         if self.show_skeleton and joint_pos is not None:
             for i, actor in enumerate(self.skeleton_actors):

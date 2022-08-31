@@ -195,7 +195,10 @@ class PyvistaVisualizer:
         self.repeat = repeat
         if enable_shadow is not None:
             self.enable_shadow = enable_shadow
-        self.pl = pyvista.Plotter(window_size=window_size)
+        if self.enable_shadow:
+            self.pl = pyvista.Plotter(window_size=window_size, lighting='none')
+        else:
+            self.pl = pyvista.Plotter(window_size=window_size)
         self.init_camera(init_args)
         self.init_scene(init_args)
         self.update_scene()
@@ -215,12 +218,15 @@ class PyvistaVisualizer:
         self.render(interactive=False)
         self.pl.screenshot(img_path)
 
-    def save_animation_as_video(self, video_path, init_args=None, window_size=(800, 800), enable_shadow=None, fps=30, crf=25, frame_dir=None, cleanup=True):
+    def save_animation_as_video(self, video_path, init_args=None, window_size=(800, 800), enable_shadow=None, fps=30, frame_dir=None, cleanup=True):
         if platform.system() == 'Linux':
             pyvista.start_xvfb()
         if enable_shadow is not None:
             self.enable_shadow = enable_shadow
-        self.pl = pyvista.Plotter(window_size=window_size, off_screen=True)
+        if self.enable_shadow:
+            self.pl = pyvista.Plotter(window_size=window_size, off_screen=True, lighting='none')
+        else:
+            self.pl = pyvista.Plotter(window_size=window_size, off_screen=True)
         self.init_camera(init_args)
         self.init_scene(init_args)
         self.pl.show(interactive_update=True)
@@ -233,7 +239,7 @@ class PyvistaVisualizer:
         os.makedirs(osp.dirname(video_path), exist_ok=True)
         for fr in tqdm(range(self.num_fr)):
             self.save_frame(fr, f'{frame_dir}/{fr:06d}.png')
-        images_to_video(frame_dir, video_path, fps=fps, crf=crf, verbose=self.verbose)
+        images_to_video(frame_dir, video_path, fps=fps, verbose=self.verbose)
         print(f'Animation saved to {video_path}')
         if cleanup:
             shutil.rmtree(frame_dir)

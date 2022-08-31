@@ -17,7 +17,7 @@ font_files = {
 }
 
 
-def images_to_video(img_dir, out_path, img_fmt="%06d.png", fps=30, crf=25, verbose=True):
+def images_to_video(img_dir, out_path, img_fmt="%06d.png", fps=30, crf=10, verbose=True):
     os.makedirs(osp.dirname(out_path), exist_ok=True)
     cmd = [FFMPEG_PATH, '-y', '-r', f'{fps}', '-f', 'image2', '-start_number', '0',
             '-i', f'{img_dir}/{img_fmt}', '-vcodec', 'libx264', '-crf', f'{crf}', '-pix_fmt', 'yuv420p', out_path]
@@ -34,7 +34,7 @@ def video_to_images(video_path, out_path, img_fmt="%06d.png", fps=30, verbose=Tr
     subprocess.run(cmd)
 
 
-def hstack_videos(video1_path, video2_path, out_path, crf=25, verbose=True, text1=None, text2=None, text_color='white', text_size=60):
+def hstack_videos(video1_path, video2_path, out_path, crf=10, verbose=True, text1=None, text2=None, text_color='white', text_size=60):
     if not (text1 is None or text2 is None):
         write_text = True
         tmp_file = f'{osp.splitext(out_path)[0]}_tmp.mp4'
@@ -59,7 +59,7 @@ def hstack_videos(video1_path, video2_path, out_path, crf=25, verbose=True, text
         os.remove(tmp_file)
 
 
-def vstack_videos(video1_path, video2_path, out_path, crf=25, verbose=True, text1=None, text2=None, text_color='white', text_size=60):
+def vstack_videos(video1_path, video2_path, out_path, crf=10, verbose=True, text1=None, text2=None, text_color='white', text_size=60):
     if not (text1 is None or text2 is None):
         write_text = True
         tmp_file = f'{osp.splitext(out_path)[0]}_tmp.mp4'
