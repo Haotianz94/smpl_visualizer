@@ -147,7 +147,10 @@ class RacketActor():
             self.handle_mesh = pyvista.Cylinder(center=(0, 0, 0), radius=0.03/2, height=0.16, direction=(0, 0, 1))
             self.handle_actor = self.pl.add_mesh(self.handle_mesh, color='black', ambient=0.3, diffuse=0.5, smooth_shading=True)
             
-            self.actors = [self.head_actor, self.net_actor, self.shaft_left_actor, self.shaft_right_actor, self.handle_actor]
+            self.normal_mesh = pyvista.Cylinder(center=(0, 0, 0.1), radius=0.01, height=0.2, direction=(0, 0, 1))
+            self.normal_actor = self.pl.add_mesh(self.normal_mesh, color='red', diffuse=1, smooth_shading=True)
+
+            self.actors = [self.head_actor, self.net_actor, self.shaft_left_actor, self.shaft_right_actor, self.handle_actor, self.normal_actor]
 
     def update_racket(self, params):
         def get_transform(new_pos, new_dir):
@@ -171,6 +174,7 @@ class RacketActor():
             self.shaft_left_actor.SetUserTransform(get_transform(params['shaft_left_center'] + params['root'], params['shaft_left_dir']))
             self.shaft_right_actor.SetUserTransform(get_transform(params['shaft_right_center'] + params['root'], params['shaft_right_dir']))
             self.handle_actor.SetUserTransform(get_transform(params['handle_center'] + params['root'], params['racket_dir']))
+            self.normal_actor.SetUserTransform(get_transform(params['head_center'] + params['root'], params['racket_normal']))
     
     def set_visibility(self, flag):
         for actor in self.actors:
@@ -233,7 +237,7 @@ class BallActor():
         self.num_exposure = num_exposure
         self.real_shadow = real_shadow
         if sport == 'tennis':
-            ball_mesh = pyvista.Sphere(center=[0,0,0], radius=0.032)
+            ball_mesh = pyvista.Sphere(center=[0,0,0], radius=0.05)
             self.actor = self.pl.add_mesh(ball_mesh, color=color, 
                 ambient=0.3, diffuse=1, smooth_shading=True)
 
@@ -259,30 +263,35 @@ class BallActor():
             NotImplemented
 
     def update_ball(self, params):
-        if params.get('pos') is None:
-            self.set_visibility(False)
+        # self.set_visibility(False)
+        if params is None:
             return
-        elif params.get('pos_blur') is not None:
+
+        if params.get('pos_blur') is not None:
             for i in range(self.num_exposure):
                 trans = vtkTransform()
                 pos = params['pos_blur'][i]
                 trans.Translate([pos[0], pos[1], pos[2]])
                 self.actors[i].SetUserTransform(trans)
+                self.actors[i].SetVisibility(True)
 
                 if not self.real_shadow:
                     trans = vtkTransform()
                     trans.Translate([pos[0], pos[1], 0])
                     self.shadow_actors[i].SetUserTransform(trans)
+                    self.shadow_actors[i].SetVisibility(True)
         else:
             trans = vtkTransform()
             pos = params['pos']
             trans.Translate([pos[0], pos[1], pos[2]])
             self.actor.SetUserTransform(trans)
+            self.actor.SetVisibility(True)
 
             if not self.real_shadow:
                 trans = vtkTransform()    
                 trans.Translate([pos[0], pos[1], 0])
                 self.shadow_actor.SetUserTransform(trans)
+                self.shadow_actor.SetVisibility(True)
 
     def set_visibility(self, flag):
         self.actor.SetVisibility(flag)
@@ -393,10 +402,18 @@ class SportVisualizer(PyvistaVisualizer):
                 self.pl.camera.up = (0, 0, 1)
                 self.pl.camera.focal_point = [0, 0, 0]
                 self.pl.camera.position = [0, 25, 5]
-            elif self.camera == 'top':
+            elif self.camera == 'top_both':
                 self.pl.camera.up = (-1, 0, 0)
                 self.pl.camera.focal_point = [0, 0, 0]
                 self.pl.camera.position = [0, 0, 35]
+            elif self.camera == 'top_near':
+                self.pl.camera.up = (-1, 0, 0)
+                self.pl.camera.focal_point = [0, -12, 0]
+                self.pl.camera.position = [0, -12, 20]
+            elif self.camera == 'top_far':
+                self.pl.camera.up = (-1, 0, 0)
+                self.pl.camera.focal_point = [0, 12, 0]
+                self.pl.camera.position = [0, 12, 20]
             elif self.camera == 'side_both':
                 self.pl.camera.up = (0, 0, 1)
                 self.pl.camera.focal_point = [0, 0, 0]
@@ -544,6 +561,10 @@ class SportVisualizer(PyvistaVisualizer):
         smpl_seq, racket_seq, ball_seq = init_args.get('smpl_seq'), init_args.get('racket_seq'), init_args.get('ball_seq')
         if smpl_seq is not None:
             self.setup_animation(smpl_seq, racket_seq, ball_seq)
+        elif ball_seq is not None:
+            self.ball_params = ball_seq
+            self.fr = 0
+            self.num_fr = len(ball_seq[0])
         self.num_actors = init_args['num_actors']
 
         if self.show_smpl:
@@ -587,7 +608,10 @@ class SportVisualizer(PyvistaVisualizer):
             self.tar_recover_actors = [TargetRecoveryActor(self.pl) for _ in range(self.num_actors)]
         
         if self.show_ball:
-            if self.num_actors <= 2:
+            if not self.show_skeleton:
+                self.ball_actors = [BallActor(self.pl, init_args.get('sport'), color='yellow' if a < self.num_actors//2 else 'red', 
+                    real_shadow=self.enable_shadow) for a in range(self.num_actors)] 
+            elif self.num_actors <= 2:
                 self.ball_actors = [BallActor(self.pl, init_args.get('sport'), 
                     real_shadow=self.enable_shadow) for _ in range(self.num_actors)] 
             else:
@@ -658,11 +682,7 @@ class SportVisualizer(PyvistaVisualizer):
             for i, actor in enumerate(self.ball_actors):
                 if i >= len(self.ball_params): actor.set_visibility(False)
                 else:
-                    if self.ball_params[i][self.fr] is not None:
-                        actor.update_ball(self.ball_params[i][self.fr])
-                        actor.set_visibility(True)
-                    else:
-                        actor.set_visibility(False)
+                    actor.update_ball(self.ball_params[i][self.fr])
 
     def setup_key_callback(self):
         super().setup_key_callback()
@@ -688,17 +708,25 @@ class SportVisualizer(PyvistaVisualizer):
         def reset_camera_side_both():
             self.init_camera({'camera': 'side_both'})
 
-        def reset_camera_top():
-            self.init_camera({'camera': 'top'})
+        def reset_camera_top_both():
+            self.init_camera({'camera': 'top_both'})
+        
+        def reset_camera_top_near():
+            self.init_camera({'camera': 'top_near'})
+
+        def reset_camera_top_far():
+            self.init_camera({'camera': 'top_far'})
 
         self.pl.add_key_event('t', track_first_actor)
 
         self.pl.add_key_event('1', reset_camera_front)
         self.pl.add_key_event('2', reset_camera_back)
-        self.pl.add_key_event('3', reset_camera_side_near)
-        self.pl.add_key_event('4', reset_camera_side_far)
-        self.pl.add_key_event('5', reset_camera_side_both)
-        self.pl.add_key_event('6', reset_camera_top)
+        self.pl.add_key_event('3', reset_camera_side_both)
+        self.pl.add_key_event('4', reset_camera_side_near)
+        self.pl.add_key_event('5', reset_camera_side_far)
+        self.pl.add_key_event('6', reset_camera_top_both)
+        self.pl.add_key_event('7', reset_camera_top_near)
+        self.pl.add_key_event('8', reset_camera_top_far)
 
     def show_animation_online(self, window_size=(800, 800), init_args=None, enable_shadow=None, 
             show_axes=True, off_screen=False):
@@ -758,7 +786,6 @@ class SportVisualizer(PyvistaVisualizer):
         if self.show_ball and ball_params is not None:
             for i, actor in enumerate(self.ball_actors):
                 actor.update_ball(ball_params[i])
-                actor.set_visibility(True)
             
         if self.show_stats and stats is not None:
             self.text_actor_phase.SetInput('Phase: {:.2f}'.format(stats['phase'].cpu().numpy()))
