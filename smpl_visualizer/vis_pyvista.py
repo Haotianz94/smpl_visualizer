@@ -25,7 +25,7 @@ class PyvistaVisualizer:
         # animation control
         self.fr = 0
         self.num_fr = 1
-        self.fps_arr = [10, 20, 30, 40, 50, 60]
+        self.fps_arr = [1, 2, 5, 10, 30, 40, 50, 60]
         self.T_arr = [1, 2, 4, 6, 8, 10, 15, 20, 30, 40, 50, 60]
         self.T = init_T
         self.paused = False
@@ -132,7 +132,7 @@ class PyvistaVisualizer:
         def go_to_end():
             self.fr = self.num_fr - 1
             self.update_scene()
-
+        
         self.pl.add_key_event('q', close)
         self.pl.add_key_event('s', slowdown)
         self.pl.add_key_event('d', speedup)
