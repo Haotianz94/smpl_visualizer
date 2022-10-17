@@ -6,7 +6,7 @@ import numpy as np
 from collections import namedtuple
 from smplx import SMPL as _SMPL
 import os
-from smplx.lbs import vertices2joints, batch_rigid_transform, batch_rodrigues, transform_mat
+from smplx.lbs import vertices2joints, batch_rigid_transform, batch_rodrigues, transform_mat, blend_shapes
 import pdb
 
 ModelOutput = namedtuple('ModelOutput',
@@ -291,8 +291,12 @@ class SMPL(_SMPL):
         # J_regressor_extra = np.load(JOINT_REGRESSOR_TRAIN_EXTRA)
         # self.register_buffer('J_regressor_extra', torch.tensor(J_regressor_extra, dtype=torch.float32))
         self.joint_map = torch.tensor(joints, dtype=torch.long).to(self.device)
-            
-        joint_pos_bind = torch.matmul(self.J_regressor, self.v_template).to(self.device)
+        
+        if 'betas' in kwargs.keys():
+            v_shaped = self.v_template + blend_shapes(torch.FloatTensor([kwargs['betas']]), self.shapedirs)[0]
+        else:
+            v_shaped = self.v_template
+        joint_pos_bind = torch.matmul(self.J_regressor, v_shaped).to(self.device)
         joint_pos_bind_rel = joint_pos_bind.clone()
         joint_pos_bind_rel[1:] -= joint_pos_bind[self.parents[1:]]
         joint_pos_bind_rel[0] = 0

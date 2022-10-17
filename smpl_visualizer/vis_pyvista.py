@@ -97,12 +97,14 @@ class PyvistaVisualizer:
         def slowdown():
             if self.frame_mode == 'fps':
                 self.fps = self.fps_arr[(self.fps_arr.index(self.fps) - 1) % len(self.fps_arr)]
+                print(f'Setting fps to {self.fps}')
             else:
                 self.T = self.T_arr[(self.T_arr.index(self.T) + 1) % len(self.T_arr)]
 
         def speedup():
             if self.frame_mode == 'fps':
                 self.fps = self.fps_arr[(self.fps_arr.index(self.fps) + 1) % len(self.fps_arr)]
+                print(f'Setting fps to {self.fps}')
             else:
                 self.T = self.T_arr[(self.T_arr.index(self.T) - 1) % len(self.T_arr)]
 
