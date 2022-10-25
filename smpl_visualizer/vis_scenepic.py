@@ -6,14 +6,21 @@ from .torch_transform import quat_between_two_vec, quaternion_to_angle_axis
 from .vis import make_checker_board_texture, get_color_palette
 from tqdm import tqdm
 from PIL import Image
+import os
 
-NET_TEXTURE_PATH = BASE_DIR + 'net_texture.png'
+NET_TEXTURE_PATH = os.path.join(BASE_DIR, 'net_texture.png')
 
 class SportVisualizerHTML():
-    def __init__(self, device=torch.device('cpu')):
-        self.smpl = SMPL(SMPL_MODEL_DIR, create_transl=False).to(device)
+    def __init__(self, smpl=None, device=torch.device('cpu'), show_ball=True):
+        self.show_ball = show_ball
+        if smpl is not None:
+            self.smpl = smpl
+        else:
+            self.smpl = SMPL(SMPL_MODEL_DIR, create_transl=False).to(device)
         self.smpl_faces = self.smpl.faces
+        self.smpl_seq = None
         self.racket_params = None
+        self.ball_params = None
     
     def get_camera_intrinsics(self, width=1920, height=1080):
         fx = fy = max(width, height)
@@ -244,13 +251,20 @@ class SportVisualizerHTML():
         if self.sport == 'tennis':
             racket_mesh = scene.create_mesh()
             # Head
-            racket_mesh.add_disc(
+            # racket_mesh.add_disc(
+            #     color=np.array([50, 50, 50]) / 255.,
+            #     segment_count=50,
+            #     fill_triangles=False,  
+            #     add_wireframe=True,  
+            #     transform=get_transform(
+            #         scale=[1, 0.3, 0.26],
+            #         trans=params['head_center'] + params['root'], 
+            #         new_dir=params['racket_normal']
+            # ))
+            racket_mesh.add_cylinder(
                 color=np.array([50, 50, 50]) / 255.,
-                segment_count=50,
-                fill_triangles=False,  
-                add_wireframe=True,  
                 transform=get_transform(
-                    scale=[1, 0.3, 0.26],
+                    scale=[0.02, 0.3, 0.3],
                     trans=params['head_center'] + params['root'], 
                     new_dir=params['racket_normal']
             ))
@@ -258,14 +272,14 @@ class SportVisualizerHTML():
             racket_mesh.add_cylinder(
                 color=np.array([50, 50, 50]) / 255., 
                 transform=get_transform(
-                    scale=[0.12/np.cos(np.pi/10), 0.02, 0.02],
+                    scale=[0.15/np.cos(np.pi/10), 0.015, 0.015],
                     trans=params['shaft_left_center'] + params['root'], 
                     new_dir=params['shaft_left_dir']
             ))
             racket_mesh.add_cylinder(
                 color=np.array([50, 50, 50]) / 255., 
                 transform=get_transform(
-                    scale=[0.12/np.cos(np.pi/10), 0.015, 0.015],
+                    scale=[0.15/np.cos(np.pi/10), 0.015, 0.015],
                     trans=params['shaft_right_center'] + params['root'], 
                     new_dir=params['shaft_right_dir']
             ))
@@ -273,7 +287,7 @@ class SportVisualizerHTML():
             racket_mesh.add_cylinder(
                 color=np.array([50, 50, 50]) / 255., 
                 transform=get_transform(
-                    scale=[0.16, 0.03, 0.03],
+                    scale=[0.2, 0.03, 0.03],
                     trans=params['handle_center'] + params['root'], 
                     new_dir=params['racket_dir']
             ))
@@ -332,13 +346,22 @@ class SportVisualizerHTML():
                     smpl_mesh = scene.create_mesh(shared_color=(0.7, 0.7, 0.7) if j == 0 else (0.5, 0.5, 0.5))
                 else:
                     smpl_mesh = scene.create_mesh(shared_color=colors[j])
-                if self.smpl_seq['joint_rot'][j, i].sum() != 0:
+                if self.smpl_seq is None or self.smpl_seq['joint_rot'][j, i].sum() != 0:
                     smpl_mesh.add_mesh_without_normals(self.smpl_verts[j, i].contiguous().numpy(), self.smpl_faces)
                     frame.add_mesh(smpl_mesh)
 
                 if self.racket_params is not None:
                     racket_mesh = self.create_racket(scene, self.racket_params[j][i])
                 if racket_mesh is not None: frame.add_mesh(racket_mesh)
+
+                if self.show_ball and self.ball_params is not None:
+                    ball_mesh = scene.create_mesh()
+                    wlh = (0.1, 0.1, 0.1)
+                    center = self.ball_params[j][i]
+                    ball_mesh.add_sphere(
+                        color=np.array([223,255,79]) / 255., 
+                        transform=np.dot(sp.Transforms.Translate(center), sp.Transforms.Scale(wlh)))
+                    frame.add_mesh(ball_mesh)
 
             frame.camera = self.load_default_camera(cam_intrinsics)
         return canvas
@@ -351,8 +374,14 @@ class SportVisualizerHTML():
         self.sport = init_args.get('sport', 'tennis')
         self.correct_root_height = init_args.get('correct_root_height')
 
-        self.init_players_and_rackets(smpl_seq=init_args.get('smpl_seq'), 
-            racket_seq=init_args.get('racket_seq'))
+        if init_args.get('smpl_verts') is not None:
+            self.smpl_verts = init_args['smpl_verts'].cpu()
+            self.racket_params = init_args.get('racket_params')
+            self.ball_params = init_args.get('ball_params')
+            self.num_actors, self.num_fr = self.smpl_verts.shape[:2]
+        else:
+            self.init_players_and_rackets(smpl_seq=init_args.get('smpl_seq'), 
+                racket_seq=init_args.get('racket_seq'))
 
         self.create_canvas(scene)
 

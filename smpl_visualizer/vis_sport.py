@@ -259,14 +259,14 @@ class BallActor():
             
             if not self.real_shadow:
                 shadow_mesh = pyvista.Circle(radius=0.05)
-                self.shadow_actor = self.pl.add_mesh(shadow_mesh, color='gray', 
+                self.shadow_actor = self.pl.add_mesh(shadow_mesh, color='#101010', 
                     diffuse=1, smooth_shading=True)
 
                 if self.blur: 
                     self.shadow_actors = []
                     for i in range(self.num_exposure):
                         shadow_mesh = pyvista.Circle(radius=0.05)
-                        self.shadow_actors += [self.pl.add_mesh(shadow_mesh, color='gray', 
+                        self.shadow_actors += [self.pl.add_mesh(shadow_mesh, color='#101010', 
                             diffuse=1, smooth_shading=True)]
         else:
             NotImplemented
@@ -300,7 +300,7 @@ class BallActor():
 
             if not self.real_shadow:
                 trans = vtkTransform()    
-                trans.Translate([pos[0], pos[1], 0])
+                trans.Translate([pos[0], pos[1], 0.01])
                 self.shadow_actor.SetUserTransform(trans)
                 self.shadow_actor.SetVisibility(True)
 
@@ -651,9 +651,10 @@ class SportVisualizer(PyvistaVisualizer):
             self.text_actor_tar = self.pl.add_text('', position=(30, 1050), color='black', font_size=12)
             self.text_actor_reward = self.pl.add_text('', position=(30, 1020), color='black', font_size=12)
             self.text_actor_residual = self.pl.add_text('', position=(30, 990), color='black', font_size=12)
-            self.text_actor_wrist = self.pl.add_text('', position=(30, 960), color='black', font_size=12)
-            self.text_actor_racket = self.pl.add_text('', position=(30, 930), color='black', font_size=12)
-            self.text_actor_ball = self.pl.add_text('', position=(30, 900), color='black', font_size=12)
+            self.text_actor_pose = self.pl.add_text('', position=(30, 960), color='black', font_size=12)
+            self.text_actor_pose_tar = self.pl.add_text('', position=(30, 930), color='black', font_size=12)
+            self.text_actor_racket = self.pl.add_text('', position=(30, 900), color='black', font_size=12)
+            self.text_actor_ball = self.pl.add_text('', position=(30, 870), color='black', font_size=12)
       
     def update_camera(self, interactive):
         # root_pos = self.smpl_joints[0, self.fr, 0].cpu().numpy()
@@ -669,9 +670,9 @@ class SportVisualizer(PyvistaVisualizer):
         if self.track_first_actor and self.camera == 'front':
             root_pos = self.smpl_joints[0, self.fr, 0].cpu().numpy()
             if self.sport == 'tennis':
-                new_pos = [root_pos[0] / 2, -25, 5]
+                new_pos = [root_pos[0], -25, 5]
             else:
-                new_pos = [root_pos[0] / 2, -13, 3]
+                new_pos = [root_pos[0], -13, 3]
             self.pl.camera.up = (0, 0, 1)
             self.pl.camera.focal_point = [0, 0, 0]
             self.pl.camera.position = new_pos
@@ -785,6 +786,7 @@ class SportVisualizer(PyvistaVisualizer):
         if enable_shadow is not None:
             self.enable_shadow = enable_shadow
         if self.enable_shadow:
+            window_size = (1000, 1000)
             self.pl = pyvista.Plotter(window_size=window_size, off_screen=off_screen, lighting='none')
         else:
             self.pl = pyvista.Plotter(window_size=window_size, off_screen=off_screen)
@@ -803,7 +805,7 @@ class SportVisualizer(PyvistaVisualizer):
                 actor.update_verts(smpl_verts[i].cpu().numpy())
                 actor.set_visibility(True)
                 if self.show_skeleton: 
-                    actor.set_opacity(0.3)
+                    actor.set_opacity(0.8 if not self.enable_shadow else 1.0)
                 else:
                     actor.set_opacity(1.0)
 
@@ -843,24 +845,32 @@ class SportVisualizer(PyvistaVisualizer):
             #     np.array2string(stats['tar_pos'].cpu().numpy(), formatter={'all': lambda x: '%.2f' % x}, separator=','),
             #     stats['tar_action'].cpu().numpy()
             # ))
-            self.text_actor_tar.SetInput('Target time, action, phase: {:02d}, {}, {:.2f}, {}'.format(
+            self.text_actor_tar.SetInput('Target time, action, phase: {:02d}, {}, {:.2f}'.format(
                 stats['tar_time'].cpu().numpy(),
                 stats['tar_action'].cpu().numpy(),
                 stats['phase'].cpu().numpy(),
-                stats.get('data_idx', 0)
+                # stats.get('data_idx', 0)
             ))
-            self.text_actor_reward.SetInput('Reward: ({}) - {}'.format(
-                stats['sub_reward_names'].replace('_reward', ''),
-                np.array2string(stats['sub_rewards'].cpu().numpy(), formatter={'all': lambda x: '{:>7.4f}'.format(x)}, separator=','),
-            ))
-            self.text_actor_residual.SetInput('Residual: {}'.format(
-                np.array2string(stats['residual_actions'].cpu().numpy(), formatter={'all': lambda x: '{:>5.1f}'.format(x * 180)}, separator=',')
-            ))
-            self.text_actor_wrist.SetInput('Wrist elbow, shoulder angle: {} {} {}'.format(
+            if stats['sub_reward_names'] is not None:
+                self.text_actor_reward.SetInput('Reward: ({}) - {}'.format(
+                    stats['sub_reward_names'].replace('_reward', ''),
+                    np.array2string(stats['sub_rewards'].cpu().numpy(), formatter={'all': lambda x: '{:>7.4f}'.format(x)}, separator=','),
+                ))
+            if stats['residual_actions'] is not None:
+                self.text_actor_residual.SetInput('Residual: {}'.format(
+                    np.array2string(stats['residual_actions'].cpu().numpy(), formatter={'all': lambda x: '{:>5.1f}'.format(x * 180)}, separator=',')
+                ))
+            self.text_actor_pose.SetInput('Physics Wrist, elbow, shoulder: {} {} {}'.format(
                 # np.array2string(stats['wrist_angle_glb'].cpu().numpy(), formatter={'all': lambda x: '{:04.1f}'.format(x * 180 / pi)}, separator=','),
                 np.array2string(stats['wrist_angle'].cpu().numpy(), formatter={'all': lambda x: '{:>5.1f}'.format(x * 180 / pi)}, separator=','),
                 np.array2string(stats['elbow_angle'].cpu().numpy(), formatter={'all': lambda x: '{:>5.1f}'.format(x * 180 / pi)}, separator=','),
                 np.array2string(stats['shoulder_angle'].cpu().numpy(), formatter={'all': lambda x: '{:>5.1f}'.format(x * 180 / pi)}, separator=','),
+            ))
+            self.text_actor_pose_tar.SetInput('Target Wrist, elbow, shoulder: {} {} {}'.format(
+                # np.array2string(stats['wrist_angle_glb'].cpu().numpy(), formatter={'all': lambda x: '{:04.1f}'.format(x * 180 / pi)}, separator=','),
+                np.array2string(stats['wrist_angle_tar'].cpu().numpy(), formatter={'all': lambda x: '{:>5.1f}'.format(x * 180 / pi)}, separator=','),
+                np.array2string(stats['elbow_angle_tar'].cpu().numpy(), formatter={'all': lambda x: '{:>5.1f}'.format(x * 180 / pi)}, separator=','),
+                np.array2string(stats['shoulder_angle_tar'].cpu().numpy(), formatter={'all': lambda x: '{:>5.1f}'.format(x * 180 / pi)}, separator=','),
             ))
             self.text_actor_racket.SetInput('Racket pos, vel, norm: {} {} {}'.format(
                 np.array2string(stats['racket_pos'].cpu().numpy(), formatter={'all': lambda x: '{:>6.2f}'.format(x)}, separator=','),
