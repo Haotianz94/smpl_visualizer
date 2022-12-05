@@ -226,6 +226,7 @@ class PyvistaVisualizer:
         if enable_shadow is not None:
             self.enable_shadow = enable_shadow
         if self.enable_shadow:
+            window_size = (1000, 1000)
             self.pl = pyvista.Plotter(window_size=window_size, off_screen=True, lighting='none')
         else:
             self.pl = pyvista.Plotter(window_size=window_size, off_screen=True)

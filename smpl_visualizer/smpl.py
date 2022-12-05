@@ -293,16 +293,17 @@ class SMPL(_SMPL):
         self.joint_map = torch.tensor(joints, dtype=torch.long).to(self.device)
         
         if 'betas' in kwargs.keys():
-            v_shaped = self.v_template + blend_shapes(torch.FloatTensor([kwargs['betas']]), self.shapedirs)[0]
+            v_shaped = self.v_template + blend_shapes(torch.FloatTensor(kwargs['betas']), self.shapedirs)
         else:
-            v_shaped = self.v_template
+            v_shaped = self.v_template.unsqueeze(0)
         joint_pos_bind = torch.matmul(self.J_regressor, v_shaped).to(self.device)
         joint_pos_bind_rel = joint_pos_bind.clone()
-        joint_pos_bind_rel[1:] -= joint_pos_bind[self.parents[1:]]
-        joint_pos_bind_rel[0] = 0
+        joint_pos_bind_rel[:, 1:] -= joint_pos_bind[:, self.parents[1:]]
+        joint_pos_bind_rel[:, 0] = 0
         if 'batch_size' in kwargs.keys():
-            joint_pos_bind = joint_pos_bind.repeat((kwargs['batch_size'], 1, 1))
-            joint_pos_bind_rel = joint_pos_bind_rel.repeat((kwargs['batch_size'], 1, 1))
+            batch_size = kwargs['batch_size'] // len(kwargs['betas'])
+            joint_pos_bind = joint_pos_bind.repeat(batch_size, 1, 1)
+            joint_pos_bind_rel = joint_pos_bind_rel.repeat(batch_size, 1, 1)
         self.joint_pos_bind = joint_pos_bind
         self.joint_pos_bind_rel = joint_pos_bind_rel
 
