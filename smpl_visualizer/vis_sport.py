@@ -518,7 +518,7 @@ class SportVisualizer(PyvistaVisualizer):
         super().init_scene(init_args)
 
         # Init tennis court
-        if init_args.get('sport') == 'tennis':
+        if init_args.get('sport') == 'tennis' and not init_args.get('no_court', False):
             # Court
             wlh = (10.97, 11.89*2, 0.05)
             center = np.array([0, 0, -wlh[2] * 0.5])
@@ -578,7 +578,7 @@ class SportVisualizer(PyvistaVisualizer):
                 # )
                 # self.pl.add_light(light)
 
-        elif init_args.get('sport') == 'badminton':
+        elif init_args.get('sport') == 'badminton' and not init_args.get('no_court', False):
             # Court
             wlh = (6.1, 13.41, 0.05)
             center = np.array([0, 0, -wlh[2] * 0.5])
@@ -621,13 +621,20 @@ class SportVisualizer(PyvistaVisualizer):
             net_mesh.active_t_coords *= 1000
             tex = pyvista.numpy_to_texture(make_checker_board_texture('#FFFFFF', '#AAAAAA', width=10))
             self.pl.add_mesh(net_mesh, texture=tex, ambient=0.2, diffuse=0.8, opacity=0.1, smooth_shading=True)
-            
-        # floor
-        wlh = (20, 40, 0.05)
-        center = np.array([0, 0, -wlh[2] * 0.5])
-        floor_mesh = pyvista.Cube(center, *wlh)
-        floor_mesh.points[:, 2] -= 0.01
-        self.pl.add_mesh(floor_mesh, color='#769771', ambient=0.2, diffuse=0.8, specular=0.2, specular_power=5, smooth_shading=True)
+
+        if not init_args.get('no_court', False):
+            # floor
+            wlh = (20, 40, 0.05)
+            center = np.array([0, 0, -wlh[2] * 0.5])
+            floor_mesh = pyvista.Cube(center, *wlh)
+            floor_mesh.points[:, 2] -= 0.01
+            self.pl.add_mesh(floor_mesh, color='#769771', ambient=0.2, diffuse=0.8, specular=0.2, specular_power=5, smooth_shading=True)
+        else:
+            wlh = (20, 40, 0.05)
+            center = np.array([0, 0, -wlh[2] * 0.5])
+            floor_mesh = pyvista.Cube(center, *wlh)
+            floor_mesh.points[:, 2] -= 0.01
+            self.pl.add_mesh(floor_mesh, color='#e0e1dd', ambient=0.2, diffuse=0.8, specular=0, specular_power=5, smooth_shading=True)
 
         smpl_seq, racket_seq, ball_seq = init_args.get('smpl_seq'), init_args.get('racket_seq'), init_args.get('ball_seq')
         if smpl_seq is not None:
@@ -692,7 +699,9 @@ class SportVisualizer(PyvistaVisualizer):
                     colors = get_color_palette(self.num_actors, 'rainbow')
                     self.ball_actors = [BallActor(self.pl, init_args.get('sport'), color=colors[a], 
                         real_shadow=self.enable_shadow) for a in range(self.num_actors)]
-
+            elif init_args.get('add_second_ball'):
+                self.ball_actors = [BallActor(self.pl, init_args.get('sport'), blur=init_args.get('ball_blur'), 
+                    real_shadow=self.enable_shadow) for _ in range(self.num_actors * 2)]
             elif self.num_actors <= 2 or init_args.get('vis_mvae') or init_args.get('vis_pd_target'):
                 self.ball_actors = [BallActor(self.pl, init_args.get('sport'), blur=init_args.get('ball_blur'), 
                     real_shadow=self.enable_shadow) for _ in range(self.num_actors)] 
@@ -767,7 +776,7 @@ class SportVisualizer(PyvistaVisualizer):
                     elif self.show_skeleton: 
                         actor.set_opacity(0.8)
                     else:
-                        actor.set_opacity(1.0)
+                        actor.set_opacity(0.8)
 
         if self.show_skeleton and self.smpl_joints is not None:
             for i, actor in enumerate(self.skeleton_actors):
@@ -971,13 +980,14 @@ class SportVisualizer(PyvistaVisualizer):
                     np.array2string(stats['racket_normal'].cpu().numpy(), formatter={'all': lambda x: '{:>6.2f}'.format(x)}, separator=','),
                 ))
             if stats.get('ball_pos') is not None:
-                self.text_actor_ball.SetInput('Ball pos, vel, ang_vel, vspin, bounce, target: {} {} {} {} {} {}'.format(
+                self.text_actor_ball.SetInput('Ball pos, vel, ang_vel, vspin, bounce, target: {} {} {} {} {} {} {}'.format(
                     np.array2string(stats['ball_pos'].cpu().numpy(), formatter={'all': lambda x: '{:>6.2f}'.format(x)}, separator=','),
                     np.array2string(stats['ball_vel'].cpu().numpy(), formatter={'all': lambda x: '{:>6.2f}'.format(x)}, separator=','),
                     np.array2string(stats['ball_ang_vel'].cpu().numpy(), formatter={'all': lambda x: '{:>6.2f}'.format(x)}, separator=','),
                     np.array2string(stats['ball_vspin'].cpu().numpy(), formatter={'all': lambda x: '{:>6.2f}'.format(x)}, separator=','),
                     np.array2string(stats['est_ball_bounce'].cpu().numpy(), formatter={'all': lambda x: '{:>6.2f}'.format(x)}, separator=','),
                     np.array2string(stats['ball_target_pos'].cpu().numpy(), formatter={'all': lambda x: '{:>6.2f}'.format(x)}, separator=','),
+                    np.array2string(stats['ball_target_spin'].cpu().numpy(), formatter={'all': lambda x: '{}'.format(x)}, separator=','),
                 ))
             if stats.get('contact_force') is not None:
                 self.text_actor_contact.SetInput('Contact force racket, ball: {} {}'.format(
