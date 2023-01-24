@@ -447,7 +447,7 @@ class SportVisualizer(PyvistaVisualizer):
             if self.camera == 'front':
                 self.pl.camera.up = (0, 0, 1)
                 self.pl.camera.focal_point = [0, -0.66, -1.78]
-                self.pl.camera.position = [0, -30, 5] if self.enable_shadow else [0, -27, 9]
+                self.pl.camera.position = [0, -30, 5] if self.enable_shadow else [0, -25.5, 8.4]
             elif self.camera == 'back':
                 self.pl.camera.up = (0, 0, 1)
                 self.pl.camera.focal_point = [0, 0, 0]
