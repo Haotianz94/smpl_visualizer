@@ -446,8 +446,8 @@ class SportVisualizer(PyvistaVisualizer):
         if self.sport == 'tennis':
             if self.camera == 'front':
                 self.pl.camera.up = (0, 0, 1)
-                self.pl.camera.focal_point = [0, 0, 0]
-                self.pl.camera.position = [0, -30, 5] if self.enable_shadow else [0, -25, 5]
+                self.pl.camera.focal_point = [0, -0.66, -1.78]
+                self.pl.camera.position = [0, -30, 5] if self.enable_shadow else [0, -27, 9]
             elif self.camera == 'back':
                 self.pl.camera.up = (0, 0, 1)
                 self.pl.camera.focal_point = [0, 0, 0]
@@ -624,17 +624,25 @@ class SportVisualizer(PyvistaVisualizer):
 
         if not init_args.get('no_court', False):
             # floor
-            wlh = (20, 40, 0.05)
+            wlh = (100, 100, 0.05)
             center = np.array([0, 0, -wlh[2] * 0.5])
             floor_mesh = pyvista.Cube(center, *wlh)
             floor_mesh.points[:, 2] -= 0.01
             self.pl.add_mesh(floor_mesh, color='#769771', ambient=0.2, diffuse=0.8, specular=0.2, specular_power=5, smooth_shading=True)
         else:
-            wlh = (20, 40, 0.05)
+            wlh = (20.0, 40.0, 0.05)
             center = np.array([0, 0, -wlh[2] * 0.5])
-            floor_mesh = pyvista.Cube(center, *wlh)
-            floor_mesh.points[:, 2] -= 0.01
-            self.pl.add_mesh(floor_mesh, color='#e0e1dd', ambient=0.2, diffuse=0.8, specular=0, specular_power=5, smooth_shading=True)
+            self.floor_mesh = pyvista.Cube(center, *wlh)
+            self.floor_mesh.t_coords *= 10 / self.floor_mesh.t_coords.max()
+            tex = pyvista.numpy_to_texture(make_checker_board_texture('#81C6EB', '#D4F1F7'))
+            self.pl.add_mesh(self.floor_mesh, texture=tex, ambient=0.2, diffuse=0.8, specular=0.8, specular_power=5, smooth_shading=True)
+        
+            # wlh = (20, 40, 0.05)
+            # center = np.array([0, 0, -wlh[2] * 0.5])
+            # floor_mesh = pyvista.Cube(center, *wlh)
+            # floor_mesh.points[:, 2] -= 0.01
+            # self.pl.add_mesh(floor_mesh, color='#769771', ambient=0.2, diffuse=0.8, specular=0, specular_power=5, smooth_shading=True)
+            # self.pl.add_mesh(floor_mesh, color='#e0e1dd', ambient=0.2, diffuse=0.8, specular=0, specular_power=5, smooth_shading=True)
 
         smpl_seq, racket_seq, ball_seq = init_args.get('smpl_seq'), init_args.get('racket_seq'), init_args.get('ball_seq')
         if smpl_seq is not None:
