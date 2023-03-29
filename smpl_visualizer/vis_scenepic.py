@@ -10,9 +10,20 @@ import os
 
 NET_TEXTURE_PATH = os.path.join(BASE_DIR, 'net_texture.png')
 
+def get_transform(scale, trans, new_dir, old_dir=[1., 0., 0.]):
+    trans = sp.Transforms.Translate(trans)
+    scale = sp.Transforms.Scale(scale)
+    new_dir = torch.from_numpy(new_dir).float()
+    aa = quaternion_to_angle_axis(quat_between_two_vec(torch.tensor(old_dir).expand_as(new_dir), new_dir)).numpy()
+    angle = np.linalg.norm(aa, axis=-1, keepdims=True)
+    axis = aa / (angle + 1e-6)
+    rotation = sp.Transforms.rotation_matrix_from_axis_angle(axis, angle)
+    return trans.dot(rotation.dot(scale))
+
 class SportVisualizerHTML():
-    def __init__(self, smpl=None, device=torch.device('cpu'), show_ball=True):
+    def __init__(self, smpl=None, device=torch.device('cpu'), show_ball=True, show_ball_target=True):
         self.show_ball = show_ball
+        self.show_ball_target = show_ball_target
         if smpl is not None:
             self.smpl = smpl
         else:
@@ -238,16 +249,6 @@ class SportVisualizerHTML():
         # TODO: replace with an artist created racket mesh 
         if params is None: return None
 
-        def get_transform(scale, trans, new_dir, old_dir=[1., 0., 0.]):
-            trans = sp.Transforms.Translate(trans)
-            scale = sp.Transforms.Scale(scale)
-            new_dir = torch.from_numpy(new_dir).float()
-            aa = quaternion_to_angle_axis(quat_between_two_vec(torch.tensor(old_dir).expand_as(new_dir), new_dir)).numpy()
-            angle = np.linalg.norm(aa, axis=-1, keepdims=True)
-            axis = aa / (angle + 1e-6)
-            rotation = sp.Transforms.rotation_matrix_from_axis_angle(axis, angle)
-            return trans.dot(rotation.dot(scale))
-
         if self.sport == 'tennis':
             racket_mesh = scene.create_mesh()
             # Head
@@ -362,6 +363,16 @@ class SportVisualizerHTML():
                         color=np.array([223,255,79]) / 255., 
                         transform=np.dot(sp.Transforms.Translate(center), sp.Transforms.Scale(wlh)))
                     frame.add_mesh(ball_mesh)
+                
+                if self.show_ball_target and self.ball_targets is not None:
+                    ball_target_mesh = scene.create_mesh()
+                    ball_target_mesh.add_cylinder(
+                        color=np.array([1., 0, 0]),
+                        transform=get_transform(
+                            scale=(0.05, 1.0, 1.0), 
+                            trans=self.ball_targets[j][i], 
+                            new_dir=np.array([0, 0, 1.0])))
+                    frame.add_mesh(ball_target_mesh)
 
             frame.camera = self.load_default_camera(cam_intrinsics)
         return canvas
@@ -378,6 +389,7 @@ class SportVisualizerHTML():
             self.smpl_verts = init_args['smpl_verts'].cpu()
             self.racket_params = init_args.get('racket_params')
             self.ball_params = init_args.get('ball_params')
+            self.ball_targets = init_args.get('ball_targets')
             self.num_actors, self.num_fr = self.smpl_verts.shape[:2]
         else:
             self.init_players_and_rackets(smpl_seq=init_args.get('smpl_seq'), 

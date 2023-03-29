@@ -446,7 +446,7 @@ class SportVisualizer(PyvistaVisualizer):
         if self.sport == 'tennis':
             if self.camera == 'front':
                 self.pl.camera.up = (0, 0, 1)
-                self.pl.camera.focal_point = [0, -0.66, -1.78]
+                self.pl.camera.focal_point = [0, 0, 0] if self.enable_shadow else [0, -0.66, -1.78]
                 self.pl.camera.position = [0, -30, 5] if self.enable_shadow else [0, -25.5, 8.4]
             elif self.camera == 'back':
                 self.pl.camera.up = (0, 0, 1)
@@ -471,9 +471,15 @@ class SportVisualizer(PyvistaVisualizer):
             elif self.camera == 'side_near':
                 self.pl.camera.elevation = 0
                 self.pl.camera.up = (0, 0, 1)
-                self.pl.camera.focal_point = [0, -12, 0]
+                self.pl.camera.focal_point = [0, -13, 0]
                 # self.pl.camera.position = [15, -12, 3]
-                self.pl.camera.position = [15, -12, 0]
+                self.pl.camera.position = [-12, -13, 3]
+            elif self.camera == 'side_near_right':
+                self.pl.camera.elevation = 0
+                self.pl.camera.up = (0, 0, 1)
+                self.pl.camera.focal_point = [0, -13, 0]
+                # self.pl.camera.position = [15, -12, 3]
+                self.pl.camera.position = [8, -13, 3]
             elif self.camera == 'side_far':
                 self.pl.camera.elevation = 0
                 self.pl.camera.up = (0, 0, 1)
@@ -661,7 +667,9 @@ class SportVisualizer(PyvistaVisualizer):
             elif self.num_actors <= 2:
                 colors_smpl = ['#ffca3a'] * self.num_actors
             else:
-                colors_smpl = get_color_palette(self.num_actors, 'rainbow')
+                # colors_smpl = get_color_palette(self.num_actors, 'rainbow')
+                colors_smpl = get_color_palette(self.num_actors, 'Wistia')
+                # colors_smpl = ['#ffca3a'] * self.num_actors
             # vertices = self.smpl_verts[0, 0].cpu().numpy()
             # HACK: get vertices from fake smpl joint
             smpl_motion = self.smpl(
@@ -742,6 +750,9 @@ class SportVisualizer(PyvistaVisualizer):
         # self.pl.camera.position = new_pos.tolist()
         # self.pl.camera.roll = roll   # don't set roll
 
+        # print(self.pl.camera.focal_point)
+        # print(self.pl.camera.position)
+
         if self.track_first_actor:
             root_pos = self.smpl_joints[0, self.fr, 0].cpu().numpy()
             if self.camera == 'front':
@@ -784,7 +795,7 @@ class SportVisualizer(PyvistaVisualizer):
                     elif self.show_skeleton: 
                         actor.set_opacity(0.8)
                     else:
-                        actor.set_opacity(0.8)
+                        actor.set_opacity(1.0)
 
         if self.show_skeleton and self.smpl_joints is not None:
             for i, actor in enumerate(self.skeleton_actors):
@@ -796,7 +807,7 @@ class SportVisualizer(PyvistaVisualizer):
                         actor.set_visibility(False)
                     else:
                         actor.set_visibility(True)
-                        actor.set_opacity(1.0)
+                        actor.set_opacity(0.2)
                 # if i == 0 and self.fr >= 1:
                 #     print((self.smpl_joints[i, self.fr, 0] - self.smpl_joints[i, self.fr-1, 0]).norm(dim=-1))
         
@@ -950,11 +961,14 @@ class SportVisualizer(PyvistaVisualizer):
             #     np.array2string(stats['tar_pos'].cpu().numpy(), formatter={'all': lambda x: '%.2f' % x}, separator=','),
             #     stats['tar_action'].cpu().numpy()
             # ))
-            self.text_actor_tar.SetInput('Target time, action, phase, swing: {:02d}, {}, {:.2f}, {}'.format(
+            self.text_actor_tar.SetInput('Target time, action, phase, swing, recovery, atnet: {:02d}, {}, {:.2f}, {}, {}, {}'.format(
                 stats['tar_time'].cpu().numpy(),
                 stats['tar_action'].cpu().numpy(),
                 stats['phase'].cpu().numpy(),
                 stats['swing_type'].cpu().numpy(),
+                stats['target_recovery'].cpu().numpy(),
+                # stats['use_volley_vae'].cpu().numpy(),
+                stats['at_net'].cpu().numpy(),
                 # stats.get('data_idx', 0)
             ))
             if stats['sub_reward_names'] is not None:
@@ -962,10 +976,10 @@ class SportVisualizer(PyvistaVisualizer):
                     stats['sub_reward_names'].replace('_reward', ''),
                     np.array2string(stats['sub_rewards'].cpu().numpy(), formatter={'all': lambda x: '{:>7.4f}'.format(x)}, separator=','),
                 ))
-            if stats.get('residual_actions') is not None and stats.get('mvae_actions_norm') is not None:
+            if stats.get('res_dof_actions') is not None and stats.get('mvae_actions_norm') is not None:
                 self.text_actor_residual.SetInput('VAE action norm, residual: {} {}'.format(
                     np.array2string(stats['mvae_actions_norm'].cpu().numpy(), formatter={'all': lambda x: '{:>5.1f}'.format(x)}, separator=','),
-                    np.array2string(stats['residual_actions'].cpu().numpy(), formatter={'all': lambda x: '{:>5.1f}'.format(x * 180)}, separator=','),
+                    np.array2string(stats['res_dof_actions'].cpu().numpy(), formatter={'all': lambda x: '{:>5.1f}'.format(x * 180)}, separator=','),
                 ))
             if stats.get('wrist_angle') is not None:
                 self.text_actor_pose.SetInput('Physics Wrist, elbow, shoulder: {} {} {}'.format(

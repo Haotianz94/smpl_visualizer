@@ -117,7 +117,7 @@ if __name__ == '__main__':
         tests_require=['pytest'],
         install_requires=[
             'smplx[all]', 'numpy', 'opencv-python', 'pyvista', 'pyrender', 
-            'chumpy'
+            'chumpy', 'scenepic'
         ],
         cmdclass={'build_ext': BuildExtension},
         zip_safe=False)
