@@ -113,7 +113,7 @@ class SportVisualizerHTML():
             for i in range(num_actors):
                 for j in range(num_frames):
                     if racket_seq[i][j] is not None:
-                        racket_seq[i][j]['root'] = trans[i, j].numpy()
+                        racket_seq[i][j]['root'] = trans[i, j].cpu().numpy()
             self.racket_params = racket_seq
 
         self.num_actors = self.smpl_joints.shape[0]
@@ -246,7 +246,6 @@ class SportVisualizerHTML():
         frame.add_mesh(floor_mesh)
     
     def create_racket(self, scene, params):
-        # TODO: replace with an artist created racket mesh 
         if params is None: return None
 
         if self.sport == 'tennis':
@@ -348,7 +347,7 @@ class SportVisualizerHTML():
                 else:
                     smpl_mesh = scene.create_mesh(shared_color=colors[j])
                 if self.smpl_seq is None or self.smpl_seq['joint_rot'][j, i].sum() != 0:
-                    smpl_mesh.add_mesh_without_normals(self.smpl_verts[j, i].contiguous().numpy(), self.smpl_faces)
+                    smpl_mesh.add_mesh_without_normals(self.smpl_verts[j, i].contiguous().cpu().numpy(), self.smpl_faces)
                     frame.add_mesh(smpl_mesh)
 
                 if self.racket_params is not None:
