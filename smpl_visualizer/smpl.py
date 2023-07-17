@@ -7,7 +7,6 @@ from collections import namedtuple
 from smplx import SMPL as _SMPL
 import os
 from smplx.lbs import vertices2joints, batch_rigid_transform, batch_rodrigues, transform_mat, blend_shapes
-import pdb
 
 ModelOutput = namedtuple('ModelOutput',
                          ['vertices',
@@ -27,10 +26,7 @@ H36M_TO_J15 = [H36M_TO_J17[14]] + H36M_TO_J17[:14]
 H36M_TO_J16 = H36M_TO_J17[14:16] + H36M_TO_J17[:14]
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
-JOINT_REGRESSOR_TRAIN_EXTRA = os.path.join(BASE_DIR, 'data/J_regressor_extra.npy')
-JOINT_REGRESSOR_H36M = os.path.join(BASE_DIR, 'data/J_regressor_h36m.npy')
-SMPL_MEAN_PARAMS = os.path.join(BASE_DIR, 'data/smpl_mean_params.npz')
-SMPL_MODEL_DIR = os.path.join(BASE_DIR, 'data/body_models/smpl')
+SMPL_MODEL_DIR = os.path.join(BASE_DIR, 'data/smpl')
 
 
 # Map joints to SMPL joints
@@ -288,8 +284,6 @@ class SMPL(_SMPL):
             self.device = torch.device('cpu')
 
         joints = [JOINT_MAP[i] for i in self.joint_names]
-        # J_regressor_extra = np.load(JOINT_REGRESSOR_TRAIN_EXTRA)
-        # self.register_buffer('J_regressor_extra', torch.tensor(J_regressor_extra, dtype=torch.float32))
         self.joint_map = torch.tensor(joints, dtype=torch.long).to(self.device)
         
         if 'betas' in kwargs.keys():

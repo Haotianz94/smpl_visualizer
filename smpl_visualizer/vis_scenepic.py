@@ -21,13 +21,13 @@ def get_transform(scale, trans, new_dir, old_dir=[1., 0., 0.]):
     return trans.dot(rotation.dot(scale))
 
 class SportVisualizerHTML():
-    def __init__(self, smpl=None, device=torch.device('cpu'), show_ball=True, show_ball_target=True):
+    def __init__(self, smpl=None, device=torch.device('cpu'), gender='male', show_ball=True, show_ball_target=True):
         self.show_ball = show_ball
         self.show_ball_target = show_ball_target
         if smpl is not None:
             self.smpl = smpl
         else:
-            self.smpl = SMPL(SMPL_MODEL_DIR, create_transl=False).to(device)
+            self.smpl = SMPL(SMPL_MODEL_DIR, create_transl=False, gender=gender).to(device)
         self.smpl_faces = self.smpl.faces
         self.smpl_seq = None
         self.racket_params = None

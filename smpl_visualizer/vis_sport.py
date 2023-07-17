@@ -334,7 +334,7 @@ class SportVisualizer(PyvistaVisualizer):
         show_target=False, show_ball=False, show_ball_target=False, show_stats=True, 
         track_first_actor=False, track_ball=False,
         enable_shadow=False,
-        gender='neutral',
+        gender='male',
         correct_root_height=False, device=torch.device('cpu'), **kwargs):
         
         super().__init__(**kwargs)
