@@ -435,6 +435,14 @@ class SportVisualizer(PyvistaVisualizer):
                 self.pl.camera.up = (0, 0, 1)
                 self.pl.camera.focal_point = [0, 0, 0] if self.enable_shadow else [0, -0.66, -1.78]
                 self.pl.camera.position = [0, -30, 5] if self.enable_shadow else [0, -25.5, 8.4]
+            elif self.camera == 'front_right':
+                self.pl.camera.up = (0, 0, 1)
+                self.pl.camera.focal_point = [2, 0, 0] if self.enable_shadow else [0, -0.66, -1.78]
+                self.pl.camera.position = [2, -30, 5] if self.enable_shadow else [0, -25.5, 8.4]
+            elif self.camera == 'front_left':
+                self.pl.camera.up = (0, 0, 1)
+                self.pl.camera.focal_point = [-2, 0, 0] if self.enable_shadow else [0, -0.66, -1.78]
+                self.pl.camera.position = [-2, -30, 5] if self.enable_shadow else [0, -25.5, 8.4]
             elif self.camera == 'back':
                 self.pl.camera.up = (0, 0, 1)
                 self.pl.camera.focal_point = [0, 0, 0]
@@ -611,9 +619,9 @@ class SportVisualizer(PyvistaVisualizer):
 
         if self.show_smpl:
             if init_args.get('vis_mvae') and init_args.get('vis_pd_target'):
-                colors_smpl = ['#ffca3a'] * (self.num_actors // 3) + ['red'] * (self.num_actors // 3) + ['green'] * (self.num_actors // 3) 
+                colors_smpl = ['#ffca3a'] * (self.num_actors // 3) + ['#9d0208'] * (self.num_actors // 3) + ['green'] * (self.num_actors // 3) 
             elif init_args.get('vis_mvae') or init_args.get('vis_pd_target'):
-                colors_smpl = ['#ffca3a'] * (self.num_actors // 2) + ['red'] * (self.num_actors // 2)
+                colors_smpl = ['#ffca3a'] * (self.num_actors // 2) + ['#9d0208'] * (self.num_actors // 2)
             elif self.num_actors <= 2:
                 colors_smpl = ['#ffca3a'] * self.num_actors
             else:
